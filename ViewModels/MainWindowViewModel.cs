@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TomatoMix.Models;
 using TomatoMix.Services;
+using TomatoMix.Theme;
 
 namespace TomatoMix.ViewModels;
 
@@ -24,16 +25,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _suppressMicUpdate;
     private bool _suppressEqProfileSelection;
     private bool _suppressEqBandSync;
+    private bool _lastAnySolo;
     private int _tickCount;
+    private int _pollInFlight;
 
-    private static readonly string[] CustomPalette =
+    private static readonly string[] CustomChannelIcons =
     [
-        "#10B981", // Emerald
-        "#3B82F6", // Electric Blue
-        "#F97316", // Neon Orange
-        "#EAB308", // Cyber Yellow
-        "#EF4444", // Crimson
-        "#14B8A6"  // Teal
+        "settings",
+        "dashboard",
+        "terminal",
+        "play",
+        "layers",
+        "star"
     ];
 
     public ObservableCollection<AudioDeviceInfo> OutputDevices { get; } = new();
@@ -41,6 +44,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public ObservableCollection<ChannelViewModel> Channels { get; } = new();
     public ObservableCollection<EqProfile> AvailableEqProfiles { get; } = new();
     public ObservableCollection<EqBandViewModel> ActiveEqBands { get; } = new();
+
+    [ObservableProperty]
+    private bool _isDarkTheme = true;
 
     [ObservableProperty]
     private ChannelViewModel _micChannel = null!;
@@ -73,16 +79,31 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private string _newChannelName = string.Empty;
 
     [ObservableProperty]
-    private string _newChannelColorHex = "#10B981";
+    private string _newChannelIconKey = "settings";
 
     [ObservableProperty]
     private double _chatMixBalance; // -100 (Full Game) .. 0 (Center) .. +100 (Full Chat)
+
+    [ObservableProperty]
+    private double _gameChannelPeakLevel;
+
+    [ObservableProperty]
+    private double _chatChannelPeakLevel;
 
     [ObservableProperty]
     private int _totalRoutedAppsCount;
 
     [ObservableProperty]
     private string _statusMessage = "SONAR CORE ENGINE ACTIVE";
+
+    [ObservableProperty]
+    private StatusLevel _engineStatusLevel = StatusLevel.Ok;
+
+    [ObservableProperty]
+    private IBrush _engineStatusBrush = StatusMapping.ResolveStatusBrush(StatusLevel.Ok);
+
+    [ObservableProperty]
+    private IBrush _masterStatusBrush = StatusMapping.ResolveStatusBrush(StatusLevel.Ok);
 
     // ==================== PER-CHANNEL EQ STUDIO STATE ====================
     [ObservableProperty]
@@ -115,6 +136,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _apoStatusText = "CHECKING APO...";
 
+    [ObservableProperty]
+    private IBrush _apoStatusBrush = StatusMapping.ResolveStatusBrush(StatusLevel.Unknown);
+
+    public IconName ThemeToggleIcon => IsDarkTheme ? IconName.Sun : IconName.Moon;
+    public string ThemeToggleLabel => IsDarkTheme ? "LIGHT" : "DARK";
+
     public bool CanDeleteSelectedEqProfile => SelectedEqProfile is { IsBuiltIn: false };
     public string ActiveEqPreampText => ActiveEqPreampDb >= 0 ? $"+{ActiveEqPreampDb:0.0} dB" : $"{ActiveEqPreampDb:0.0} dB";
     public string EqProfilesFolderPath => _configService.ProfilesDirectory;
@@ -132,11 +159,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    public IBrush MasterAccentBrush { get; } = new SolidColorBrush(Color.Parse("#FF5500")); // SteelSeries Orange
+    public double GameMixPercent => ChatMixBalance > 0
+        ? Math.Clamp((1.0 - (ChatMixBalance / 100.0)) * 100.0, 0.0, 100.0)
+        : 100.0;
+
+    public double ChatMixPercent => ChatMixBalance < 0
+        ? Math.Clamp((1.0 - (Math.Abs(ChatMixBalance) / 100.0)) * 100.0, 0.0, 100.0)
+        : 100.0;
+
+    public string GameMixPercentText => $"{Math.Round(GameMixPercent):0}%";
+    public string ChatMixPercentText => $"{Math.Round(ChatMixPercent):0}%";
 
     public MainWindowViewModel()
     {
         _config = _configService.Load();
+        _isDarkTheme = _config.IsDarkTheme;
+        ThemeTokens.SetTheme(_isDarkTheme);
 
         InitializeEqBands();
         LoadEqProfilesList();
@@ -148,6 +186,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SyncMicFromHardware();
         ScanAndRouteAudioSessions();
         SyncHardwareEqualizerApo();
+        RefreshAllStatusBrushes();
 
         _meterTimer = new DispatcherTimer
         {
@@ -155,6 +194,56 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         };
         _meterTimer.Tick += OnMeterTimerTick;
         _meterTimer.Start();
+    }
+
+    partial void OnIsDarkThemeChanged(bool value)
+    {
+        ThemeTokens.SetTheme(value);
+        OnPropertyChanged(nameof(ThemeToggleIcon));
+        OnPropertyChanged(nameof(ThemeToggleLabel));
+        _config.IsDarkTheme = value;
+        SchedulePersist();
+        RefreshAllStatusBrushes(force: true);
+    }
+
+    [RelayCommand]
+    private void ToggleTheme()
+    {
+        IsDarkTheme = !IsDarkTheme;
+        StatusMessage = IsDarkTheme ? "THEME: DARK MONOCHROME" : "THEME: LIGHT MONOCHROME";
+    }
+
+    private void RefreshAllStatusBrushes(bool force = false)
+    {
+        var masterLevel = IsMasterMuted
+            ? StatusLevel.Critical
+            : SelectedDevice == null
+                ? StatusLevel.Offline
+                : StatusLevel.Ok;
+        MasterStatusBrush = StatusMapping.ResolveStatusBrush(masterLevel);
+
+        bool anySolo = Channels.Any(c => c.IsSolo);
+        EngineStatusLevel = SelectedDevice == null
+            ? StatusLevel.Offline
+            : IsMasterMuted
+                ? StatusLevel.Critical
+                : anySolo || IsMicMonitoring
+                    ? StatusLevel.Warning
+                    : StatusLevel.Ok;
+        EngineStatusBrush = StatusMapping.ResolveStatusBrush(EngineStatusLevel);
+
+        var apoLevel = string.Equals(ApoStatusText, "CHECKING APO...", StringComparison.OrdinalIgnoreCase)
+            ? StatusLevel.Unknown
+            : IsApoInstalled
+                ? StatusLevel.Ok
+                : StatusLevel.Warning;
+        ApoStatusBrush = StatusMapping.ResolveStatusBrush(apoLevel);
+
+        MicChannel?.RefreshStatusTheme(force);
+        foreach (var ch in Channels)
+        {
+            ch.RefreshStatusTheme(force);
+        }
     }
 
     private void InitializeEqBands()
@@ -214,8 +303,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             Id = "mic",
             Name = "MIC",
-            AccentHex = "#10B981", // Emerald Neon for Mic Input
-            IconGlyph = "chat",
+            IconGlyph = "tunnel",
             Volume = _config.MicVolume,
             IsMuted = _config.MicMuted,
             IsPreset = true,
@@ -311,6 +399,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _dspEngine.StopMicMonitor();
             StatusMessage = "MIC SIDETONE DISABLED";
         }
+        RefreshAllStatusBrushes();
     }
 
     private void RestartMicMonitor()
@@ -365,17 +454,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _audioService.SetMasterVolume((float)(value / 100.0), IsMasterMuted);
         _config.MasterVolume = value / 100.0;
-        _configService.Save(_config);
+        SchedulePersist();
     }
 
     partial void OnIsMasterMutedChanged(bool value)
     {
         OnPropertyChanged(nameof(MasterVolumePercentText));
+        RefreshAllStatusBrushes();
         if (_suppressMasterUpdate) return;
 
         _audioService.SetMasterVolume((float)(MasterVolumePercent / 100.0), value);
         _config.MasterMuted = value;
-        _configService.Save(_config);
+        SchedulePersist();
     }
 
     partial void OnMasterPeakLevelChanged(double value)
@@ -386,7 +476,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     partial void OnChatMixBalanceChanged(double value)
     {
         OnPropertyChanged(nameof(ChatMixLabelText));
-        ApplyAllChannelVolumesToAudioEngine();
+        OnPropertyChanged(nameof(GameMixPercent));
+        OnPropertyChanged(nameof(ChatMixPercent));
+        OnPropertyChanged(nameof(GameMixPercentText));
+        OnPropertyChanged(nameof(ChatMixPercentText));
+
+        bool anySolo = Channels.Any(c => c.IsSolo);
+        foreach (var ch in Channels)
+        {
+            if (ch.Id.Equals("game", StringComparison.OrdinalIgnoreCase)
+                || ch.Id.Equals("chat", StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyChannelVolumesToAudioEngine(ch, anySolo);
+            }
+        }
     }
 
     // ==================== PER-CHANNEL EQ STUDIO & PROFILE SAVER METHODS ====================
@@ -400,7 +503,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ActiveEqPreampDb = channel.EqPreampDb;
         for (int i = 0; i < 10 && i < ActiveEqBands.Count; i++)
         {
-            ActiveEqBands[i].AccentBrush = channel.AccentBrush;
             ActiveEqBands[i].SetGainSilent(channel.EqGainsDb[i]);
         }
 
@@ -481,6 +583,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             IsEqEditorOpen ? EqTargetChannel : null);
         IsApoInstalled = installed;
         ApoStatusText = summary;
+        RefreshAllStatusBrushes();
 
         if (IsAuditioningEq && EqTargetChannel != null)
         {
@@ -557,7 +660,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         EqTargetChannel.EqPreampDb = Math.Clamp(value, -12.0, 12.0);
         EqTargetChannel.RefreshMiniEqCurve();
         RefreshLargeEqCurve();
-        ApplyAllChannelVolumesToAudioEngine();
+        ApplyActiveEqTargetUpdates();
         SaveChannelStateToConfig();
     }
 
@@ -575,8 +678,34 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         EqTargetChannel.RefreshMiniEqCurve();
         RefreshLargeEqCurve();
-        ApplyAllChannelVolumesToAudioEngine();
+        ApplyActiveEqTargetUpdates();
         SaveChannelStateToConfig();
+    }
+
+    private void ApplyActiveEqTargetUpdates()
+    {
+        if (EqTargetChannel == null) return;
+
+        if (EqTargetChannel != MicChannel)
+        {
+            ApplyChannelVolumesToAudioEngine(EqTargetChannel, _lastAnySolo);
+        }
+
+        if (IsAuditioningEq)
+        {
+            _dspEngine.UpdateEqParameters(
+                EqTargetChannel.EqGainsDb,
+                EqTargetChannel.EqPreampDb,
+                EqTargetChannel.IsEqEnabled);
+        }
+
+        if (IsMicMonitoring && MicChannel != null && EqTargetChannel == MicChannel)
+        {
+            _dspEngine.UpdateMicEqParameters(
+                MicChannel.EqGainsDb,
+                MicChannel.EqPreampDb,
+                MicChannel.IsEqEnabled);
+        }
     }
 
     public void RefreshLargeEqCurve()
@@ -706,6 +835,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void ResetChatMix()
     {
         ChatMixBalance = 0;
+        StatusMessage = "CHATMIX: BALANCED";
+    }
+
+    [RelayCommand]
+    private void SetChatMixPreset(string? balanceParam)
+    {
+        if (double.TryParse(balanceParam, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double target))
+        {
+            ChatMixBalance = Math.Clamp(target, -100.0, 100.0);
+        }
     }
 
     [RelayCommand]
@@ -719,6 +858,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         LoadDevices();
         LoadMicDevices();
+        _audioService.RequestSessionRefresh();
         ScanAndRouteAudioSessions();
         StatusMessage = "AUDIO ENGINE REFRESHED";
     }
@@ -728,7 +868,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         int customIndex = Channels.Count(c => !c.IsPreset);
         NewChannelName = $"CUSTOM {customIndex + 1}";
-        NewChannelColorHex = CustomPalette[customIndex % CustomPalette.Length];
+        NewChannelIconKey = CustomChannelIcons[customIndex % CustomChannelIcons.Length];
         IsAddChannelPopupOpen = true;
     }
 
@@ -739,11 +879,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void SelectNewChannelColor(string? hex)
+    private void SelectNewChannelIcon(string? iconKey)
     {
-        if (!string.IsNullOrWhiteSpace(hex))
+        if (!string.IsNullOrWhiteSpace(iconKey))
         {
-            NewChannelColorHex = hex;
+            NewChannelIconKey = iconKey;
         }
     }
 
@@ -759,8 +899,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             Id = id,
             Name = cleanName,
-            AccentHex = NewChannelColorHex,
-            IconGlyph = "custom",
+            IconGlyph = NewChannelIconKey,
             Volume = 1.0,
             IsPreset = false,
             IsEqEnabled = true,
@@ -793,7 +932,19 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             RefreshLargeEqCurve();
         }
-        ApplyAllChannelVolumesToAudioEngine();
+
+        bool anySolo = Channels.Any(c => c.IsSolo);
+        if (anySolo != _lastAnySolo)
+        {
+            _lastAnySolo = anySolo;
+            ApplyAllChannelVolumesToAudioEngine();
+        }
+        else
+        {
+            ApplyChannelVolumesToAudioEngine(channel, anySolo);
+            ScheduleApoSync();
+        }
+
         SaveChannelStateToConfig();
     }
 
@@ -826,7 +977,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void OnAppVolumeOrMuteChanged(AppSessionViewModel app)
     {
         _config.AppRelativeVolumes[app.ProcessKey] = Math.Clamp(app.RelativeVolume / 100.0, 0.0, 1.0);
-        ApplySingleAppVolumeToAudioEngine(app);
+        ApplySingleAppVolumeToAudioEngine(app, syncApo: false);
         SchedulePersist();
     }
 
@@ -838,7 +989,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         sourceChannel?.Apps.Remove(app);
         app.ChannelId = targetChannel.Id;
-        app.AccentBrush = targetChannel.AccentBrush;
 
         if (!targetChannel.Apps.Contains(app))
         {
@@ -846,7 +996,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         _config.AppChannelAssignments[app.ProcessKey] = targetChannel.Id;
-        _configService.Save(_config);
+        SchedulePersist();
 
         ApplySingleAppVolumeToAudioEngine(app);
         StatusMessage = $"ROUTED {app.DisplayName.ToUpperInvariant()} → {targetChannel.Name}";
@@ -854,9 +1004,44 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void OnMeterTimerTick(object? sender, EventArgs e)
     {
+        if (Interlocked.CompareExchange(ref _pollInFlight, 1, 0) != 0)
+            return;
+
+        Task.Run(() =>
+        {
+            try
+            {
+                var masterState = _audioService.GetMasterState();
+                var micState = _audioService.GetMicState();
+                var activeSessions = _audioService.GetActiveSessions();
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    try
+                    {
+                        ApplyPolledAudioState(masterState, micState, activeSessions);
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _pollInFlight, 0);
+                    }
+                }, DispatcherPriority.Background);
+            }
+            catch
+            {
+                Interlocked.Exchange(ref _pollInFlight, 0);
+            }
+        });
+    }
+
+    private void ApplyPolledAudioState(
+        (float volume, bool isMuted, float peak) masterState,
+        (float volume, bool isMuted, float peak) micState,
+        List<AudioSessionData> activeSessions)
+    {
         _tickCount++;
 
-        var (mVol, mMuted, mPeak) = _audioService.GetMasterState();
+        var (mVol, mMuted, mPeak) = masterState;
         MasterPeakLevel = Math.Clamp(mPeak * 100.0, 0.0, 100.0);
 
         if (Math.Abs(MasterVolumePercent - mVol * 100.0) > 1.0 || IsMasterMuted != mMuted)
@@ -867,7 +1052,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _suppressMasterUpdate = false;
         }
 
-        var (micVol, micMuted, micPeak) = _audioService.GetMicState();
+        var (micVol, micMuted, micPeak) = micState;
         double targetMicPeak = micMuted ? 0.0 : Math.Clamp(micPeak * 100.0, 0.0, 100.0);
         MicChannel.PeakLevel = targetMicPeak >= MicChannel.PeakLevel
             ? targetMicPeak
@@ -881,12 +1066,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _suppressMicUpdate = false;
         }
 
-        ScanAndRouteAudioSessions();
+        RouteAndAnimateSessions(activeSessions);
     }
 
     private void ScanAndRouteAudioSessions()
     {
         var activeSessions = _audioService.GetActiveSessions();
+        RouteAndAnimateSessions(activeSessions);
+    }
+
+    private void RouteAndAnimateSessions(List<AudioSessionData> activeSessions)
+    {
         var activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var availableChannelIds = Channels.Select(c => c.Id).ToList();
@@ -924,7 +1114,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                                 ?? Channels[0];
 
                 appVm.ChannelId = channelVm.Id;
-                appVm.AccentBrush = channelVm.AccentBrush;
                 channelVm.Apps.Add(appVm);
                 _allSessionsByKey[session.ProcessKey] = appVm;
 
@@ -944,6 +1133,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 appVm.PeakLevel = Math.Max(0.0, appVm.PeakLevel * 0.78);
             }
+            appVm.AdvanceWaveAnimation();
         }
 
         if (_tickCount % 20 == 0)
@@ -978,25 +1168,43 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
         }
 
+        var gameCh = Channels.FirstOrDefault(c => c.Id.Equals("game", StringComparison.OrdinalIgnoreCase));
+        var chatCh = Channels.FirstOrDefault(c => c.Id.Equals("chat", StringComparison.OrdinalIgnoreCase));
+        GameChannelPeakLevel = gameCh?.PeakLevel ?? 0.0;
+        ChatChannelPeakLevel = chatCh?.PeakLevel ?? 0.0;
+
         TotalRoutedAppsCount = _allSessionsByKey.Count;
+    }
+
+    private void ApplyChannelVolumesToAudioEngine(ChannelViewModel ch, bool anySolo)
+    {
+        ch.IsEffectivelyMuted = ch.IsMuted || (anySolo && !ch.IsSolo);
+        double eqTrimScalar = EqDspService.ComputeEffectiveEqTrimScalar(
+            ch.EqGainsDb,
+            ch.EqPreampDb,
+            ch.IsEqEnabled);
+
+        foreach (var app in ch.Apps)
+        {
+            ApplySingleAppVolumeToAudioEngine(app, ch, anySolo, false, eqTrimScalar);
+        }
     }
 
     private void ApplyAllChannelVolumesToAudioEngine()
     {
         bool anySolo = Channels.Any(c => c.IsSolo);
+        _lastAnySolo = anySolo;
         foreach (var ch in Channels)
         {
-            ch.IsEffectivelyMuted = ch.IsMuted || (anySolo && !ch.IsSolo);
-            foreach (var app in ch.Apps)
-            {
-                ApplySingleAppVolumeToAudioEngine(app, ch, anySolo, false);
-            }
+            ApplyChannelVolumesToAudioEngine(ch, anySolo);
         }
+        RefreshAllStatusBrushes();
         ScheduleApoSync();
     }
 
     private DispatcherTimer? _persistTimer;
     private bool _pendingSave;
+    private bool _pendingChannelConfigSync;
     private bool _pendingApoSync;
 
     private void SchedulePersist()
@@ -1015,15 +1223,31 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (_persistTimer == null)
         {
-            _persistTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            _persistTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
             _persistTimer.Tick += (_, _) => FlushPersist();
         }
-        if (!_persistTimer.IsEnabled) _persistTimer.Start();
+        // Reset timer on each change so disk/APO writes happen only after slider dragging settles
+        _persistTimer.Stop();
+        _persistTimer.Start();
     }
 
     private void FlushPersist()
     {
         _persistTimer?.Stop();
+        if (_pendingChannelConfigSync)
+        {
+            _pendingChannelConfigSync = false;
+            _config.Channels = Channels.Select(c => c.ToConfig()).ToList();
+            if (MicChannel != null)
+            {
+                _config.MicVolume = MicChannel.VolumePercent / 100.0;
+                _config.MicMuted = MicChannel.IsMuted;
+                _config.IsMicEqEnabled = MicChannel.IsEqEnabled;
+                _config.ActiveMicEqProfileName = MicChannel.ActiveEqProfileName;
+                _config.MicEqPreampDb = MicChannel.EqPreampDb;
+                _config.MicEqGainsDb = (double[])MicChannel.EqGainsDb.Clone();
+            }
+        }
         if (_pendingSave)
         {
             _pendingSave = false;
@@ -1036,7 +1260,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void ApplySingleAppVolumeToAudioEngine(AppSessionViewModel app, ChannelViewModel? channel = null, bool? anySoloOverride = null, bool syncApo = true)
+    private void ApplySingleAppVolumeToAudioEngine(
+        AppSessionViewModel app,
+        ChannelViewModel? channel = null,
+        bool? anySoloOverride = null,
+        bool syncApo = true,
+        double? eqTrimScalarOverride = null)
     {
         channel ??= Channels.FirstOrDefault(c => c.Id.Equals(app.ChannelId, StringComparison.OrdinalIgnoreCase));
         if (channel == null) return;
@@ -1055,7 +1284,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             chatMixMultiplier = Math.Clamp(1.0 - (Math.Abs(ChatMixBalance) / 100.0), 0.0, 1.0);
         }
 
-        double eqTrimScalar = EqDspService.ComputeEffectiveEqTrimScalar(
+        double eqTrimScalar = eqTrimScalarOverride ?? EqDspService.ComputeEffectiveEqTrimScalar(
             channel.EqGainsDb,
             channel.EqPreampDb,
             channel.IsEqEnabled);
@@ -1071,16 +1300,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void SaveChannelStateToConfig()
     {
-        _config.Channels = Channels.Select(c => c.ToConfig()).ToList();
-        if (MicChannel != null)
-        {
-            _config.MicVolume = MicChannel.VolumePercent / 100.0;
-            _config.MicMuted = MicChannel.IsMuted;
-            _config.IsMicEqEnabled = MicChannel.IsEqEnabled;
-            _config.ActiveMicEqProfileName = MicChannel.ActiveEqProfileName;
-            _config.MicEqPreampDb = MicChannel.EqPreampDb;
-            _config.MicEqGainsDb = (double[])MicChannel.EqGainsDb.Clone();
-        }
+        _pendingChannelConfigSync = true;
         SchedulePersist();
         ScheduleApoSync();
     }

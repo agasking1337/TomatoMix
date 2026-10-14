@@ -14,7 +14,7 @@
     <Product>TomatoMix Audio Mixer</Product>
     <Company>TomatoMix</Company>
     <Description>Multi-Channel Application Audio Router, Mixer &amp; 10-Band Equalizer</Description>
-    <DefaultItemExcludes>$(DefaultItemExcludes);Installer\**;dist\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);dist\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

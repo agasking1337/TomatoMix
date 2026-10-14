@@ -245,6 +245,7 @@ public class ConfigService
 
         var config = new MixerConfig
         {
+            IsDarkTheme = true,
             MasterVolume = 1.0,
             MasterMuted = false,
             MicVolume = 1.0,
@@ -259,8 +260,7 @@ public class ConfigService
                 {
                     Id = "game",
                     Name = "GAME",
-                    AccentHex = "#00E5FF",
-                    IconGlyph = "game",
+                    IconGlyph = "dashboard",
                     Volume = 1.0,
                     IsPreset = true,
                     IsEqEnabled = true,
@@ -272,8 +272,7 @@ public class ConfigService
                 {
                     Id = "chat",
                     Name = "CHAT",
-                    AccentHex = "#A855F7",
-                    IconGlyph = "chat",
+                    IconGlyph = "telegram",
                     Volume = 1.0,
                     IsPreset = true,
                     IsEqEnabled = true,
@@ -285,8 +284,7 @@ public class ConfigService
                 {
                     Id = "media",
                     Name = "MEDIA",
-                    AccentHex = "#EC4899",
-                    IconGlyph = "media",
+                    IconGlyph = "play",
                     Volume = 0.85,
                     IsPreset = true,
                     IsEqEnabled = true,
@@ -298,8 +296,7 @@ public class ConfigService
                 {
                     Id = "aux",
                     Name = "AUX",
-                    AccentHex = "#F59E0B",
-                    IconGlyph = "aux",
+                    IconGlyph = "layers",
                     Volume = 0.90,
                     IsPreset = true,
                     IsEqEnabled = true,

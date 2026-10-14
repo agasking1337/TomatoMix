@@ -14,6 +14,8 @@ public class EqualizerApoService
 
     private string? _cachedConfigDir;
     private readonly string _fallbackAppDataFile;
+    private string? _lastWrittenContent;
+    private bool _ensuredMainConfigInclude;
 
     public EqualizerApoService()
     {
@@ -61,11 +63,13 @@ public class EqualizerApoService
             {
                 _cachedConfigDir = dir;
                 EnsureMainConfigIncludesTomatoMix(dir);
+                _ensuredMainConfigInclude = true;
                 return true;
             }
         }
 
         _cachedConfigDir = null;
+        _ensuredMainConfigInclude = false;
         return false;
     }
 
@@ -100,7 +104,10 @@ public class EqualizerApoService
         IReadOnlyList<ChannelViewModel> channels,
         ChannelViewModel? currentlyEditedChannel)
     {
-        DetectEqualizerApoConfigDirectory();
+        if (_cachedConfigDir == null)
+        {
+            DetectEqualizerApoConfigDirectory();
+        }
 
         // Determine effective 10-band gains + preamp to push to Equalizer APO:
         // 1. If a channel is currently open in the EQ Studio, or only specific channels have active audio apps,
@@ -139,11 +146,11 @@ public class EqualizerApoService
 
             if (activeWithApps.Count > 0)
             {
-                // Weight by channel volume (and boost weight if apps in that channel are actively playing sound)
+                // Weight by channel volume
                 double totalWeight = 0.0;
                 foreach (var ch in activeWithApps)
                 {
-                    double w = (ch.VolumePercent / 100.0) * (ch.PeakLevel > 1.0 ? 3.0 : 1.0);
+                    double w = ch.VolumePercent / 100.0;
                     if (w <= 0.01) w = 0.1;
                     totalWeight += w;
 
@@ -195,14 +202,18 @@ public class EqualizerApoService
         }
 
         string content = sb.ToString();
+        bool contentChanged = !string.Equals(content, _lastWrittenContent, StringComparison.Ordinal);
 
-        // Always write to %AppData%\TomatoMix\tomatomix_eq.txt
-        try
+        if (contentChanged)
         {
-            File.WriteAllText(_fallbackAppDataFile, content);
-        }
-        catch
-        {
+            // Write to %AppData%\TomatoMix\tomatomix_eq.txt
+            try
+            {
+                File.WriteAllText(_fallbackAppDataFile, content);
+            }
+            catch
+            {
+            }
         }
 
         // If Equalizer APO is installed, write directly to C:\Program Files\EqualizerAPO\config\tomatomix_eq.txt
@@ -210,9 +221,17 @@ public class EqualizerApoService
         {
             try
             {
-                EnsureMainConfigIncludesTomatoMix(_cachedConfigDir);
-                string apoFile = Path.Combine(_cachedConfigDir, IncludeFileName);
-                File.WriteAllText(apoFile, content);
+                if (!_ensuredMainConfigInclude)
+                {
+                    EnsureMainConfigIncludesTomatoMix(_cachedConfigDir);
+                    _ensuredMainConfigInclude = true;
+                }
+                if (contentChanged)
+                {
+                    string apoFile = Path.Combine(_cachedConfigDir, IncludeFileName);
+                    File.WriteAllText(apoFile, content);
+                }
+                _lastWrittenContent = content;
                 return (true, $"APO LIVE: {sourceLabel}");
             }
             catch (UnauthorizedAccessException)
@@ -224,6 +243,7 @@ public class EqualizerApoService
             }
         }
 
+        _lastWrittenContent = content;
         return (false, "EQUALIZER APO NOT DETECTED (Click 'APO HOOK' to install or use 'AUDITION EQ')");
     }
 

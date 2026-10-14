@@ -1,6 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using TomatoMix.ViewModels;
 
 namespace TomatoMix.Views;
@@ -25,9 +28,12 @@ public partial class MainWindow : Window
         if (!point.Properties.IsLeftButtonPressed)
             return;
 
-        // Don't start drag if clicking a button or slider inside the card
-        if (e.Source is Control src && (src is Button || src is Slider || src.Parent is Button || src.Parent is Slider))
-            return;
+        // Walk the visual tree so template children inside Slider / Thumb / Track / Button are properly detected
+        for (Visual? v = e.Source as Visual; v != null && v != control; v = v.GetVisualParent())
+        {
+            if (v is Button || v is ToggleButton || v is Slider || v is Track || v is Thumb)
+                return;
+        }
 
         _draggedApp = appVm;
         var dragData = new DataObject();

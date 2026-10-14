@@ -1,4 +1,3 @@
-using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -15,9 +14,6 @@ public partial class EqBandViewModel : ObservableObject
 
     [ObservableProperty]
     private double _gainDb; // -12.0 .. +12.0 dB
-
-    [ObservableProperty]
-    private IBrush _accentBrush = new SolidColorBrush(Color.Parse("#00E5FF"));
 
     public string GainText => GainDb >= 0 ? $"+{GainDb:0.0} dB" : $"{GainDb:0.0} dB";
 

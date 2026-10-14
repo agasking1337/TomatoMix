@@ -3,6 +3,94 @@
              x:Class="TomatoMix.App"
              RequestedThemeVariant="Dark">
 
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+
+                <!-- ==================== LIGHT THEME TOKENS ==================== -->
+                <ResourceDictionary x:Key="Light">
+                    <!-- Core Semantic Color Tokens -->
+                    <SolidColorBrush x:Key="TokenBg" Color="#EAEFF5" />
+                    <SolidColorBrush x:Key="TokenSurface" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="TokenSurfaceRaised" Color="#FCFDFE" />
+                    <SolidColorBrush x:Key="TokenSurfaceInset" Color="#DDE3EC" />
+                    <SolidColorBrush x:Key="TokenText" Color="#212121" />
+                    <SolidColorBrush x:Key="TokenTextMuted" Color="#5B6066" />
+                    <SolidColorBrush x:Key="TokenTextFaint" Color="#AEB7C2" />
+                    <SolidColorBrush x:Key="TokenBorder" Color="#DDE3EC" />
+                    <SolidColorBrush x:Key="TokenBorderStrong" Color="#AEB7C2" />
+                    <SolidColorBrush x:Key="TokenAccent" Color="#212121" />
+                    <SolidColorBrush x:Key="TokenAccentFg" Color="#FFFFFF" />
+
+                    <!-- Monochrome Surface & Overlay Helpers -->
+                    <SolidColorBrush x:Key="TokenAccentSubtle" Color="#18212121" />
+                    <SolidColorBrush x:Key="TokenBackdrop" Color="#B3171717" />
+
+                    <!-- Server / Engine Status Color Tokens (Light) -->
+                    <SolidColorBrush x:Key="TokenStatusOk" Color="#1E824C" />
+                    <SolidColorBrush x:Key="TokenStatusWarning" Color="#B7791F" />
+                    <SolidColorBrush x:Key="TokenStatusCritical" Color="#C0392B" />
+                    <SolidColorBrush x:Key="TokenStatusOffline" Color="#6E7681" />
+                    <SolidColorBrush x:Key="TokenStatusUnknown" Color="#AEB7C2" />
+
+                    <!-- Subtle Status Fill Tokens (Light) -->
+                    <SolidColorBrush x:Key="TokenStatusOkSubtle" Color="#221E824C" />
+                    <SolidColorBrush x:Key="TokenStatusWarningSubtle" Color="#22B7791F" />
+                    <SolidColorBrush x:Key="TokenStatusCriticalSubtle" Color="#22C0392B" />
+                    <SolidColorBrush x:Key="TokenStatusOfflineSubtle" Color="#226E7681" />
+
+                    <!-- Live VU Meter Status Gradient (Light) -->
+                    <LinearGradientBrush x:Key="TokenVuMeterGradient" StartPoint="0%,100%" EndPoint="0%,0%">
+                        <GradientStop Offset="0.0" Color="#1E824C" />
+                        <GradientStop Offset="0.65" Color="#B7791F" />
+                        <GradientStop Offset="1.0" Color="#C0392B" />
+                    </LinearGradientBrush>
+                </ResourceDictionary>
+
+                <!-- ==================== DARK THEME TOKENS ==================== -->
+                <ResourceDictionary x:Key="Dark">
+                    <!-- Core Semantic Color Tokens -->
+                    <SolidColorBrush x:Key="TokenBg" Color="#171717" />
+                    <SolidColorBrush x:Key="TokenSurface" Color="#212121" />
+                    <SolidColorBrush x:Key="TokenSurfaceRaised" Color="#2A2A2D" />
+                    <SolidColorBrush x:Key="TokenSurfaceInset" Color="#1A1A1A" />
+                    <SolidColorBrush x:Key="TokenText" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="TokenTextMuted" Color="#AEB7C2" />
+                    <SolidColorBrush x:Key="TokenTextFaint" Color="#73FFFFFF" />
+                    <SolidColorBrush x:Key="TokenBorder" Color="#26FFFFFF" />
+                    <SolidColorBrush x:Key="TokenBorderStrong" Color="#40FFFFFF" />
+                    <SolidColorBrush x:Key="TokenAccent" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="TokenAccentFg" Color="#212121" />
+
+                    <!-- Monochrome Surface & Overlay Helpers -->
+                    <SolidColorBrush x:Key="TokenAccentSubtle" Color="#1FFFFFFF" />
+                    <SolidColorBrush x:Key="TokenBackdrop" Color="#CC171717" />
+
+                    <!-- Server / Engine Status Color Tokens (Dark) -->
+                    <SolidColorBrush x:Key="TokenStatusOk" Color="#5FD08A" />
+                    <SolidColorBrush x:Key="TokenStatusWarning" Color="#E8C15A" />
+                    <SolidColorBrush x:Key="TokenStatusCritical" Color="#F07777" />
+                    <SolidColorBrush x:Key="TokenStatusOffline" Color="#7C8595" />
+                    <SolidColorBrush x:Key="TokenStatusUnknown" Color="#73FFFFFF" />
+
+                    <!-- Subtle Status Fill Tokens (Dark) -->
+                    <SolidColorBrush x:Key="TokenStatusOkSubtle" Color="#265FD08A" />
+                    <SolidColorBrush x:Key="TokenStatusWarningSubtle" Color="#26E8C15A" />
+                    <SolidColorBrush x:Key="TokenStatusCriticalSubtle" Color="#26F07777" />
+                    <SolidColorBrush x:Key="TokenStatusOfflineSubtle" Color="#267C8595" />
+
+                    <!-- Live VU Meter Status Gradient (Dark) -->
+                    <LinearGradientBrush x:Key="TokenVuMeterGradient" StartPoint="0%,100%" EndPoint="0%,0%">
+                        <GradientStop Offset="0.0" Color="#5FD08A" />
+                        <GradientStop Offset="0.65" Color="#E8C15A" />
+                        <GradientStop Offset="1.0" Color="#F07777" />
+                    </LinearGradientBrush>
+                </ResourceDictionary>
+
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
     </Application.Styles>

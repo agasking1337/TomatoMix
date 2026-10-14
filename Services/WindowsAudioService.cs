@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using AvaloniaBitmap = Avalonia.Media.Imaging.Bitmap;
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
@@ -10,14 +12,51 @@ namespace TomatoMix.Services;
 
 public class WindowsAudioService : IDisposable
 {
-    private readonly MMDeviceEnumerator _enumerator = new();
+    private const int ProcessQueryLimitedInformation = 0x1000;
+    private const long SessionRefreshIntervalMs = 5_000;
+    private const long DeadPidCacheTtlMs = 30_000;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool QueryFullProcessImageName(IntPtr hProcess, int dwFlags, System.Text.StringBuilder lpExeName, ref int lpdwSize);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    // Create MMDeviceEnumerator on a ThreadPool (MTA) thread so WASAPI COM objects live in the MTA
+    // rather than being pinned to the UI STA message loop.
+    private readonly MMDeviceEnumerator _enumerator = Task.Run(() => new MMDeviceEnumerator()).GetAwaiter().GetResult();
     private MMDevice? _activeDevice;
     private MMDevice? _activeMicDevice;
+    private AudioSessionManager? _hookedSessionManager;
     private readonly object _lock = new();
-    private const long PidCacheTtl = 30_000;
+
     private readonly record struct PidInfo(string? Key, string? DisplayName, string? ExePath, long Stamp);
+    private readonly record struct CachedSessionGroup(
+        int ProcessId,
+        string ProcessKey,
+        string DisplayName,
+        string? ExecutablePath,
+        bool IsSystemSounds,
+        List<AudioSessionControl> Controls);
+
     private readonly Dictionary<int, PidInfo> _pidInfoCache = new();
+    private readonly Dictionary<string, CachedSessionGroup> _sessionGroupsByKey = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (float Volume, bool Mute)> _desiredProcessStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, (float Volume, bool Mute)> _pendingProcessUpdates = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AvaloniaBitmap?> _iconCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _stateLock = new();
+    private readonly object _iconLock = new();
+
+    private volatile bool _sessionsDirty = true;
+    private long _lastSessionRefreshTick;
+    private int _volumeFlushQueued;
+    private (float Volume, bool Mute)? _pendingMasterUpdate;
+    private (float Volume, bool Mute)? _pendingMicUpdate;
+    private (float Volume, bool Mute) _lastKnownMasterState = (1.0f, false);
+    private (float Volume, bool Mute) _lastKnownMicState = (1.0f, false);
 
     public List<AudioDeviceInfo> GetInputDevices()
     {
@@ -55,6 +94,7 @@ public class WindowsAudioService : IDisposable
     {
         lock (_lock)
         {
+            _pendingMicUpdate = null;
             try
             {
                 _activeMicDevice?.Dispose();
@@ -97,9 +137,11 @@ public class WindowsAudioService : IDisposable
 
             try
             {
-                var vol = _activeMicDevice.AudioEndpointVolume.MasterVolumeLevelScalar;
-                var muted = _activeMicDevice.AudioEndpointVolume.Mute;
+                var pending = _pendingMicUpdate;
+                var vol = pending?.Volume ?? _activeMicDevice.AudioEndpointVolume.MasterVolumeLevelScalar;
+                var muted = pending?.Mute ?? _activeMicDevice.AudioEndpointVolume.Mute;
                 var peak = _activeMicDevice.AudioMeterInformation.MasterPeakValue;
+                _lastKnownMicState = (vol, muted);
                 return (vol, muted, peak);
             }
             catch
@@ -111,25 +153,16 @@ public class WindowsAudioService : IDisposable
 
     public void SetMicVolume(float scalarVolume, bool isMuted)
     {
-        lock (_lock)
+        float clamped = Math.Clamp(scalarVolume, 0.0f, 1.0f);
+        lock (_stateLock)
         {
-            if (_activeMicDevice == null) return;
-            try
-            {
-                float clamped = Math.Clamp(scalarVolume, 0.0f, 1.0f);
-                if (Math.Abs(_activeMicDevice.AudioEndpointVolume.MasterVolumeLevelScalar - clamped) > 0.002f)
-                {
-                    _activeMicDevice.AudioEndpointVolume.MasterVolumeLevelScalar = clamped;
-                }
-                if (_activeMicDevice.AudioEndpointVolume.Mute != isMuted)
-                {
-                    _activeMicDevice.AudioEndpointVolume.Mute = isMuted;
-                }
-            }
-            catch
-            {
-            }
+            if (Math.Abs(_lastKnownMicState.Volume - clamped) <= 0.002f && _lastKnownMicState.Mute == isMuted)
+                return;
+
+            _lastKnownMicState = (clamped, isMuted);
+            _pendingMicUpdate = (clamped, isMuted);
         }
+        QueueVolumeFlush();
     }
 
     public MMDevice? GetClonedMicDevice(string? deviceId)
@@ -184,6 +217,12 @@ public class WindowsAudioService : IDisposable
     {
         lock (_lock)
         {
+            UnhookSessionManagerLocked();
+            _sessionGroupsByKey.Clear();
+            _sessionsDirty = true;
+            _lastSessionRefreshTick = 0;
+            _pendingMasterUpdate = null;
+
             try
             {
                 _activeDevice?.Dispose();
@@ -208,6 +247,31 @@ public class WindowsAudioService : IDisposable
                 }
             }
         }
+    }
+
+    private void UnhookSessionManagerLocked()
+    {
+        if (_hookedSessionManager != null)
+        {
+            try
+            {
+                _hookedSessionManager.OnSessionCreated -= OnAudioSessionCreated;
+            }
+            catch
+            {
+            }
+            _hookedSessionManager = null;
+        }
+    }
+
+    private void OnAudioSessionCreated(object sender, IAudioSessionControl newSession)
+    {
+        _sessionsDirty = true;
+    }
+
+    public void RequestSessionRefresh()
+    {
+        _sessionsDirty = true;
     }
 
     public string? GetActiveDeviceId()
@@ -249,9 +313,11 @@ public class WindowsAudioService : IDisposable
 
             try
             {
-                var vol = _activeDevice.AudioEndpointVolume.MasterVolumeLevelScalar;
-                var muted = _activeDevice.AudioEndpointVolume.Mute;
+                var pending = _pendingMasterUpdate;
+                var vol = pending?.Volume ?? _activeDevice.AudioEndpointVolume.MasterVolumeLevelScalar;
+                var muted = pending?.Mute ?? _activeDevice.AudioEndpointVolume.Mute;
                 var peak = _activeDevice.AudioMeterInformation.MasterPeakValue;
+                _lastKnownMasterState = (vol, muted);
                 return (vol, muted, peak);
             }
             catch
@@ -263,25 +329,16 @@ public class WindowsAudioService : IDisposable
 
     public void SetMasterVolume(float scalarVolume, bool isMuted)
     {
-        lock (_lock)
+        float clamped = Math.Clamp(scalarVolume, 0.0f, 1.0f);
+        lock (_stateLock)
         {
-            if (_activeDevice == null) return;
-            try
-            {
-                float clamped = Math.Clamp(scalarVolume, 0.0f, 1.0f);
-                if (Math.Abs(_activeDevice.AudioEndpointVolume.MasterVolumeLevelScalar - clamped) > 0.002f)
-                {
-                    _activeDevice.AudioEndpointVolume.MasterVolumeLevelScalar = clamped;
-                }
-                if (_activeDevice.AudioEndpointVolume.Mute != isMuted)
-                {
-                    _activeDevice.AudioEndpointVolume.Mute = isMuted;
-                }
-            }
-            catch
-            {
-            }
+            if (Math.Abs(_lastKnownMasterState.Volume - clamped) <= 0.002f && _lastKnownMasterState.Mute == isMuted)
+                return;
+
+            _lastKnownMasterState = (clamped, isMuted);
+            _pendingMasterUpdate = (clamped, isMuted);
         }
+        QueueVolumeFlush();
     }
 
     public List<AudioSessionData> GetActiveSessions()
@@ -297,263 +354,459 @@ public class WindowsAudioService : IDisposable
 
             try
             {
-                var sessionManager = _activeDevice.AudioSessionManager;
-                sessionManager.RefreshSessions();
-                var sessions = sessionManager.Sessions;
-                int currentAppPid = Environment.ProcessId;
                 long now = Environment.TickCount64;
-                if (_pidInfoCache.Count > 512)
+                if (_sessionsDirty || _sessionGroupsByKey.Count == 0 || now - _lastSessionRefreshTick >= SessionRefreshIntervalMs)
                 {
-                    foreach (var k in _pidInfoCache.Where(kv => now - kv.Value.Stamp >= PidCacheTtl).Select(kv => kv.Key).ToList())
-                        _pidInfoCache.Remove(k);
+                    RefreshSessionGroupsLocked(now);
                 }
 
-                var groupedByKey = new Dictionary<string, AudioSessionData>(StringComparer.OrdinalIgnoreCase);
-
-                for (int i = 0; i < sessions.Count; i++)
+                foreach (var group in _sessionGroupsByKey.Values)
                 {
-                    var s = sessions[i];
-                    try
+                    float maxPeak = 0f;
+                    int validControls = 0;
+
+                    for (int i = group.Controls.Count - 1; i >= 0; i--)
                     {
-                        var state = s.State;
-                        if (state == AudioSessionState.AudioSessionStateExpired)
-                            continue;
-
-                        int pid = (int)s.GetProcessID;
-                        if (pid == currentAppPid)
-                            continue;
-
-                        bool isSys = s.IsSystemSoundsSession || pid == 0;
-                        string processKey;
-                        string displayName;
-                        string? exePath = null;
-
-                        if (isSys)
-                        {
-                            processKey = "system_sounds";
-                            displayName = "System Sounds";
-                        }
-                        else
-                        {
-                            if (_pidInfoCache.TryGetValue(pid, out var cachedInfo) && now - cachedInfo.Stamp < PidCacheTtl)
-                            {
-                                if (cachedInfo.Key == null) continue;
-                                processKey = cachedInfo.Key;
-                                displayName = cachedInfo.DisplayName!;
-                                exePath = cachedInfo.ExePath;
-                            }
-                            else
-                            {
-                                try
-                                {
-                                    using var proc = Process.GetProcessById(pid);
-                                    string procName = proc.ProcessName;
-                                    if (string.IsNullOrWhiteSpace(procName))
-                                    {
-                                        _pidInfoCache[pid] = new PidInfo(null, null, null, now);
-                                        continue;
-                                    }
-
-                                    processKey = procName.ToLowerInvariant();
-                                    try
-                                    {
-                                        exePath = proc.MainModule?.FileName;
-                                    }
-                                    catch
-                                    {
-                                    }
-
-                                    string? title = null;
-                                    try
-                                    {
-                                        if (!string.IsNullOrWhiteSpace(exePath))
-                                        {
-                                            var versionInfo = FileVersionInfo.GetVersionInfo(exePath);
-                                            title = versionInfo.FileDescription;
-                                        }
-                                    }
-                                    catch
-                                    {
-                                    }
-
-                                    if (string.IsNullOrWhiteSpace(title))
-                                    {
-                                        title = !string.IsNullOrWhiteSpace(s.DisplayName) && !s.DisplayName.StartsWith("@")
-                                            ? s.DisplayName
-                                            : FormatProcessName(procName);
-                                    }
-
-                                    displayName = title!;
-                                    _pidInfoCache[pid] = new PidInfo(processKey, displayName, exePath, now);
-                                }
-                                catch
-                                {
-                                    _pidInfoCache[pid] = new PidInfo(null, null, null, now);
-                                    continue;
-                                }
-                            }
-                        }
-
-                        float peak = 0f;
+                        var s = group.Controls[i];
                         try
                         {
-                            peak = s.AudioMeterInformation.MasterPeakValue;
+                            if (s.State == AudioSessionState.AudioSessionStateExpired)
+                            {
+                                group.Controls.RemoveAt(i);
+                                continue;
+                            }
+
+                            validControls++;
+                            float peak = s.AudioMeterInformation.MasterPeakValue;
+                            if (peak > maxPeak)
+                            {
+                                maxPeak = peak;
+                            }
                         }
                         catch
                         {
-                        }
-
-                        float rawVol = 1f;
-                        bool rawMute = false;
-                        try
-                        {
-                            rawVol = s.SimpleAudioVolume.Volume;
-                            rawMute = s.SimpleAudioVolume.Mute;
-                        }
-                        catch
-                        {
-                        }
-
-                        if (groupedByKey.TryGetValue(processKey, out var existing))
-                        {
-                            if (peak > existing.CurrentPeak)
-                            {
-                                existing.CurrentPeak = peak;
-                            }
-                            if (existing.ExecutablePath == null && exePath != null)
-                            {
-                                existing.ExecutablePath = exePath;
-                            }
-                        }
-                        else
-                        {
-                            groupedByKey[processKey] = new AudioSessionData
-                            {
-                                ProcessId = pid,
-                                ProcessKey = processKey,
-                                DisplayName = displayName,
-                                ExecutablePath = exePath,
-                                CurrentPeak = peak,
-                                RawVolume = rawVol,
-                                RawMute = rawMute,
-                                IsSystemSounds = isSys
-                            };
+                            group.Controls.RemoveAt(i);
                         }
                     }
-                    catch
+
+                    if (validControls == 0)
                     {
+                        _sessionsDirty = true;
+                        continue;
                     }
-                }
 
-                list.AddRange(groupedByKey.Values);
+                    list.Add(new AudioSessionData
+                    {
+                        ProcessId = group.ProcessId,
+                        ProcessKey = group.ProcessKey,
+                        DisplayName = group.DisplayName,
+                        ExecutablePath = group.ExecutablePath,
+                        CurrentPeak = maxPeak,
+                        IsSystemSounds = group.IsSystemSounds
+                    });
+                }
             }
             catch
             {
+                _sessionsDirty = true;
             }
         }
         return list;
     }
 
-    public void ApplyProcessVolume(string processKey, float effectiveVolume, bool effectiveMute)
+    private void RefreshSessionGroupsLocked(long now)
     {
-        lock (_lock)
+        if (_activeDevice == null) return;
+
+        var sessionManager = _activeDevice.AudioSessionManager;
+        if (!ReferenceEquals(_hookedSessionManager, sessionManager))
         {
-            if (_activeDevice == null) return;
+            UnhookSessionManagerLocked();
+            _hookedSessionManager = sessionManager;
             try
             {
-                var sessions = _activeDevice.AudioSessionManager.Sessions;
-                float clampedVol = Math.Clamp(effectiveVolume, 0.0f, 1.0f);
+                _hookedSessionManager.OnSessionCreated += OnAudioSessionCreated;
+            }
+            catch
+            {
+            }
+        }
 
-                for (int i = 0; i < sessions.Count; i++)
+        _sessionsDirty = false;
+        _lastSessionRefreshTick = now;
+
+        sessionManager.RefreshSessions();
+        var sessions = sessionManager.Sessions;
+        int currentAppPid = Environment.ProcessId;
+        var activePids = new HashSet<int>();
+
+        _sessionGroupsByKey.Clear();
+
+        for (int i = 0; i < sessions.Count; i++)
+        {
+            var s = sessions[i];
+            try
+            {
+                if (s.State == AudioSessionState.AudioSessionStateExpired)
+                    continue;
+
+                int pid = (int)s.GetProcessID;
+                if (pid == currentAppPid)
+                    continue;
+
+                activePids.Add(pid);
+                bool isSys = s.IsSystemSoundsSession || pid == 0;
+                string processKey;
+                string displayName;
+                string? exePath = null;
+
+                if (isSys)
                 {
-                    var s = sessions[i];
-                    try
-                    {
-                        if (s.State == AudioSessionState.AudioSessionStateExpired)
-                            continue;
+                    processKey = "system_sounds";
+                    displayName = "System Sounds";
+                }
+                else
+                {
+                    if (!TryResolvePidMetadataLocked(pid, s, now, out processKey, out displayName, out exePath))
+                        continue;
+                }
 
-                        int pid = (int)s.GetProcessID;
-                        bool isSys = s.IsSystemSoundsSession || pid == 0;
-                        string key;
-                        if (isSys)
-                        {
-                            key = "system_sounds";
-                        }
-                        else
-                        {
-                            if (_pidInfoCache.TryGetValue(pid, out var cachedInfo) && Environment.TickCount64 - cachedInfo.Stamp < PidCacheTtl)
-                            {
-                                if (cachedInfo.Key == null) continue;
-                                key = cachedInfo.Key;
-                            }
-                            else
-                            {
-                                try
-                                {
-                                    using var proc = Process.GetProcessById(pid);
-                                    key = proc.ProcessName.ToLowerInvariant();
-                                }
-                                catch
-                                {
-                                    continue;
-                                }
-                            }
-                        }
-
-                        if (string.Equals(key, processKey, StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (Math.Abs(s.SimpleAudioVolume.Volume - clampedVol) > 0.003f)
-                            {
-                                s.SimpleAudioVolume.Volume = clampedVol;
-                            }
-                            if (s.SimpleAudioVolume.Mute != effectiveMute)
-                            {
-                                s.SimpleAudioVolume.Mute = effectiveMute;
-                            }
-                        }
-                    }
-                    catch
+                if (_sessionGroupsByKey.TryGetValue(processKey, out var existingGroup))
+                {
+                    existingGroup.Controls.Add(s);
+                    if (existingGroup.ExecutablePath == null && exePath != null)
                     {
+                        _sessionGroupsByKey[processKey] = existingGroup with { ExecutablePath = exePath };
                     }
+                }
+                else
+                {
+                    _sessionGroupsByKey[processKey] = new CachedSessionGroup(
+                        pid,
+                        processKey,
+                        displayName,
+                        exePath,
+                        isSys,
+                        new List<AudioSessionControl> { s });
+                }
+
+                // Ensure any newly discovered session immediately receives its desired volume/mute state
+                (float Volume, bool Mute) desired;
+                bool hasDesired;
+                lock (_stateLock)
+                {
+                    hasDesired = _desiredProcessStates.TryGetValue(processKey, out desired);
+                }
+                if (hasDesired)
+                {
+                    ApplyVolumeToControlSafe(s, desired.Volume, desired.Mute);
                 }
             }
             catch
             {
             }
         }
+
+        if (_pidInfoCache.Count > 256)
+        {
+            var stalePids = _pidInfoCache
+                .Where(kv => !activePids.Contains(kv.Key) && now - kv.Value.Stamp >= DeadPidCacheTtlMs)
+                .Select(kv => kv.Key)
+                .ToList();
+            foreach (var k in stalePids)
+            {
+                _pidInfoCache.Remove(k);
+            }
+        }
     }
 
-    public AvaloniaBitmap? GetAppIcon(string processKey, string? executablePath)
+    private bool TryResolvePidMetadataLocked(
+        int pid,
+        AudioSessionControl session,
+        long now,
+        out string processKey,
+        out string displayName,
+        out string? exePath)
     {
-        if (_iconCache.TryGetValue(processKey, out var cached))
-            return cached;
+        processKey = string.Empty;
+        displayName = string.Empty;
+        exePath = null;
 
-        if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+        if (_pidInfoCache.TryGetValue(pid, out var cachedInfo))
         {
-            _iconCache[processKey] = null;
-            return null;
+            if (cachedInfo.Key != null)
+            {
+                // Keep active PIDs fresh so they never all expire simultaneously every 30s
+                _pidInfoCache[pid] = cachedInfo with { Stamp = now };
+                processKey = cachedInfo.Key;
+                displayName = cachedInfo.DisplayName!;
+                exePath = cachedInfo.ExePath;
+                return true;
+            }
+
+            if (now - cachedInfo.Stamp < DeadPidCacheTtlMs)
+            {
+                return false;
+            }
         }
 
         try
         {
-            using var sysIcon = Icon.ExtractAssociatedIcon(executablePath);
-            if (sysIcon != null)
+            exePath = TryGetProcessExecutablePathFast(pid);
+            string? procName = !string.IsNullOrWhiteSpace(exePath)
+                ? Path.GetFileNameWithoutExtension(exePath)
+                : null;
+
+            if (string.IsNullOrWhiteSpace(procName))
             {
-                using var bmp = sysIcon.ToBitmap();
-                using var ms = new MemoryStream();
-                bmp.Save(ms, ImageFormat.Png);
-                ms.Position = 0;
-                var avaloniaBitmap = new AvaloniaBitmap(ms);
-                _iconCache[processKey] = avaloniaBitmap;
-                return avaloniaBitmap;
+                using var proc = Process.GetProcessById(pid);
+                procName = proc.ProcessName;
+            }
+
+            if (string.IsNullOrWhiteSpace(procName))
+            {
+                _pidInfoCache[pid] = new PidInfo(null, null, null, now);
+                return false;
+            }
+
+            processKey = procName.ToLowerInvariant();
+            string? title = null;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath))
+                {
+                    var versionInfo = FileVersionInfo.GetVersionInfo(exePath);
+                    title = versionInfo.FileDescription;
+                }
+            }
+            catch
+            {
+            }
+
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                string? sessionDisplayName = null;
+                try
+                {
+                    sessionDisplayName = session.DisplayName;
+                }
+                catch
+                {
+                }
+
+                title = !string.IsNullOrWhiteSpace(sessionDisplayName) && !sessionDisplayName.StartsWith("@")
+                    ? sessionDisplayName
+                    : FormatProcessName(procName);
+            }
+
+            displayName = title!;
+            _pidInfoCache[pid] = new PidInfo(processKey, displayName, exePath, now);
+            return true;
+        }
+        catch
+        {
+            _pidInfoCache[pid] = new PidInfo(null, null, null, now);
+            return false;
+        }
+    }
+
+    private static string? TryGetProcessExecutablePathFast(int pid)
+    {
+        IntPtr handle = OpenProcess(ProcessQueryLimitedInformation, false, pid);
+        if (handle == IntPtr.Zero)
+            return null;
+
+        try
+        {
+            var sb = new System.Text.StringBuilder(1024);
+            int size = sb.Capacity;
+            if (QueryFullProcessImageName(handle, 0, sb, ref size) && size > 0)
+            {
+                return sb.ToString(0, size);
             }
         }
         catch
         {
         }
+        finally
+        {
+            CloseHandle(handle);
+        }
 
-        _iconCache[processKey] = null;
         return null;
+    }
+
+    public void ApplyProcessVolume(string processKey, float effectiveVolume, bool effectiveMute)
+    {
+        float clampedVol = Math.Clamp(effectiveVolume, 0.0f, 1.0f);
+        lock (_stateLock)
+        {
+            if (_desiredProcessStates.TryGetValue(processKey, out var prev)
+                && Math.Abs(prev.Volume - clampedVol) <= 0.002f
+                && prev.Mute == effectiveMute)
+            {
+                return;
+            }
+            _desiredProcessStates[processKey] = (clampedVol, effectiveMute);
+        }
+
+        _pendingProcessUpdates[processKey] = (clampedVol, effectiveMute);
+        QueueVolumeFlush();
+    }
+
+    private void QueueVolumeFlush()
+    {
+        if (Interlocked.CompareExchange(ref _volumeFlushQueued, 1, 0) == 0)
+        {
+            Task.Run(FlushPendingVolumes);
+        }
+    }
+
+    private void FlushPendingVolumes()
+    {
+        try
+        {
+            while (true)
+            {
+                (float Volume, bool Mute)? masterUpdate;
+                (float Volume, bool Mute)? micUpdate;
+                lock (_stateLock)
+                {
+                    masterUpdate = _pendingMasterUpdate;
+                    _pendingMasterUpdate = null;
+                    micUpdate = _pendingMicUpdate;
+                    _pendingMicUpdate = null;
+                }
+
+                var processKeys = _pendingProcessUpdates.Keys.ToList();
+
+                if (masterUpdate == null && micUpdate == null && processKeys.Count == 0)
+                    break;
+
+                lock (_lock)
+                {
+                    if (masterUpdate is { } m && _activeDevice != null)
+                    {
+                        try
+                        {
+                            if (Math.Abs(_activeDevice.AudioEndpointVolume.MasterVolumeLevelScalar - m.Volume) > 0.002f)
+                            {
+                                _activeDevice.AudioEndpointVolume.MasterVolumeLevelScalar = m.Volume;
+                            }
+                            if (_activeDevice.AudioEndpointVolume.Mute != m.Mute)
+                            {
+                                _activeDevice.AudioEndpointVolume.Mute = m.Mute;
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    if (micUpdate is { } mic && _activeMicDevice != null)
+                    {
+                        try
+                        {
+                            if (Math.Abs(_activeMicDevice.AudioEndpointVolume.MasterVolumeLevelScalar - mic.Volume) > 0.002f)
+                            {
+                                _activeMicDevice.AudioEndpointVolume.MasterVolumeLevelScalar = mic.Volume;
+                            }
+                            if (_activeMicDevice.AudioEndpointVolume.Mute != mic.Mute)
+                            {
+                                _activeMicDevice.AudioEndpointVolume.Mute = mic.Mute;
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    foreach (var key in processKeys)
+                    {
+                        if (!_pendingProcessUpdates.TryRemove(key, out var target))
+                            continue;
+
+                        if (_sessionGroupsByKey.TryGetValue(key, out var group))
+                        {
+                            for (int i = 0; i < group.Controls.Count; i++)
+                            {
+                                ApplyVolumeToControlSafe(group.Controls[i], target.Volume, target.Mute);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _volumeFlushQueued, 0);
+            bool hasMore;
+            lock (_stateLock)
+            {
+                hasMore = _pendingMasterUpdate != null || _pendingMicUpdate != null || !_pendingProcessUpdates.IsEmpty;
+            }
+            if (hasMore)
+            {
+                QueueVolumeFlush();
+            }
+        }
+    }
+
+    private static void ApplyVolumeToControlSafe(AudioSessionControl control, float clampedVol, bool effectiveMute)
+    {
+        try
+        {
+            if (control.State == AudioSessionState.AudioSessionStateExpired)
+                return;
+
+            if (Math.Abs(control.SimpleAudioVolume.Volume - clampedVol) > 0.003f)
+            {
+                control.SimpleAudioVolume.Volume = clampedVol;
+            }
+            if (control.SimpleAudioVolume.Mute != effectiveMute)
+            {
+                control.SimpleAudioVolume.Mute = effectiveMute;
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    public AvaloniaBitmap? GetAppIcon(string processKey, string? executablePath)
+    {
+        lock (_iconLock)
+        {
+            if (_iconCache.TryGetValue(processKey, out var cached))
+                return cached;
+
+            if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+            {
+                _iconCache[processKey] = null;
+                return null;
+            }
+
+            try
+            {
+                using var sysIcon = Icon.ExtractAssociatedIcon(executablePath);
+                if (sysIcon != null)
+                {
+                    using var bmp = sysIcon.ToBitmap();
+                    using var ms = new MemoryStream();
+                    bmp.Save(ms, ImageFormat.Png);
+                    ms.Position = 0;
+                    var avaloniaBitmap = new AvaloniaBitmap(ms);
+                    _iconCache[processKey] = avaloniaBitmap;
+                    return avaloniaBitmap;
+                }
+            }
+            catch
+            {
+            }
+
+            _iconCache[processKey] = null;
+            return null;
+        }
     }
 
     private static string FormatProcessName(string name)
@@ -566,6 +819,8 @@ public class WindowsAudioService : IDisposable
     {
         lock (_lock)
         {
+            UnhookSessionManagerLocked();
+            _sessionGroupsByKey.Clear();
             _activeDevice?.Dispose();
             _activeMicDevice?.Dispose();
             _enumerator.Dispose();

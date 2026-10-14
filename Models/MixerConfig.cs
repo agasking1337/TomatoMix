@@ -2,6 +2,7 @@ namespace TomatoMix.Models;
 
 public class MixerConfig
 {
+    public bool IsDarkTheme { get; set; } = true;
     public string? SelectedDeviceId { get; set; }
     public string? SelectedMicDeviceId { get; set; }
     public double MasterVolume { get; set; } = 1.0;
@@ -22,8 +23,7 @@ public class ChannelConfig
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public string AccentHex { get; set; } = "#00E5FF";
-    public string IconGlyph { get; set; } = "custom";
+    public string IconGlyph { get; set; } = "settings";
     public double Volume { get; set; } = 1.0;
     public bool IsMuted { get; set; }
     public bool IsSolo { get; set; }

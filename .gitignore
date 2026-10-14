@@ -5,9 +5,6 @@ dist/
 out/
 publish/
 
-# Installer temporary payload
-Installer/TomatoMix.Setup/payload.zip
-
 # IDE & User-specific files
 .vs/
 .idea/
