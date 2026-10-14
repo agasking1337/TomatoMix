@@ -12,7 +12,7 @@ internal static class Program
 {
     public const string AppName = "TomatoMix";
     public const string AppDisplayName = "TomatoMix Audio Mixer";
-    public const string AppVersion = "1.0.0";
+    public const string AppVersion = "1.0.1";
     public const string Publisher = "TomatoMix";
     public const string UninstallRegKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\TomatoMix";
     public const string StartupRegKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
