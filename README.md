@@ -27,15 +27,13 @@
 
 ## Installation
 
-### Option 1: Portable Executable (`TomatoMix-Portable.exe`)
+### Option 1: Windows MSI Installer (`TomatoMix.msi`)
+1. Download `TomatoMix.msi` from the [Releases](../../releases) page.
+2. Double-click `TomatoMix.msi` to install TomatoMix into `%LocalAppData%\Programs\TomatoMix` with Start Menu and Desktop shortcuts (no administrator privileges or certificates required).
+
+### Option 2: Portable Executable (`TomatoMix-Portable.exe`)
 1. Download `TomatoMix-Portable.exe` from the [Releases](../../releases) page.
 2. Run `TomatoMix-Portable.exe` directly — no installation or external `.NET` runtime is required.
-
-### Option 2: Windows MSIX Package (`TomatoMix.msix`)
-1. Download `TomatoMix.msix` (and `TomatoMix.cer` if signed with the CI self-signed certificate) from the [Releases](../../releases) page.
-2. If using the CI self-signed build, trust the certificate once before installing:
-   - Double-click `TomatoMix.cer` -> **Install Certificate...** -> **Local Machine** -> **Place all certificates in the following store** -> **Trusted People** (or **Trusted Root Certification Authorities**).
-3. Double-click `TomatoMix.msix` and click **Install**.
 
 ---
 
@@ -64,14 +62,11 @@ dotnet publish .\TomatoMix.csproj `
 
 ---
 
-## CI/CD & MSIX Packaging
+## CI/CD & MSI Packaging
 
-MSIX packaging is generated exclusively in GitHub Actions (`.github/workflows/release.yml`) so no packaging projects or manifest files clutter the repository:
-- Triggered automatically when pushing a `v*` tag (e.g., `v1.0.1`) or manually via **Actions -> Build & Release Windows MSIX & EXE**.
-- Dynamically generates visual assets from `Assets/app.ico` and `AppxManifest.xml`, packs `TomatoMix.msix` using the Windows SDK (`makeappx.exe`), and signs it with `signtool.exe`.
-- **Custom Code Signing Certificate (Optional)**:
-  - Add `WINDOWS_PFX_BASE64` (base64-encoded `.pfx` file) and `WINDOWS_PFX_PASSWORD` to your repository's GitHub Actions secrets to sign the MSIX with your own certificate.
-  - When those secrets are not set, the workflow automatically generates a self-signed certificate and attaches `TomatoMix.cer` alongside `TomatoMix.msix`.
+Windows `.msi` packaging is generated exclusively in GitHub Actions (`.github/workflows/release.yml`) so no installer projects or `.wxs` files clutter the repository:
+- Triggered automatically when pushing a `v*` tag (e.g., `v1.0.2`) or manually via **Actions -> Build & Release Windows MSI & EXE**.
+- Dynamically generates the WiX v5 definition (`TomatoMix.wxs`) and builds `TomatoMix.msi` alongside `TomatoMix-Portable.exe`.
 
 ---
 

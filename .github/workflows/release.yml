@@ -1,4 +1,4 @@
-name: Build & Release Windows MSIX & EXE
+name: Build & Release Windows MSI & EXE
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Optional tag name to create a GitHub Release (e.g. v1.0.1). Leave empty to only upload workflow artifacts.'
+        description: 'Optional tag name to create a GitHub Release (e.g. v1.0.2). Leave empty to only upload workflow artifacts.'
         required: false
         default: ''
 
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build-and-release:
-    name: Build TomatoMix MSIX & Standalone EXE
+    name: Build TomatoMix MSI & Standalone EXE
     runs-on: windows-latest
 
     steps:
@@ -47,26 +47,21 @@ jobs:
           if ($cleanVersion -notmatch '^\d+\.\d+\.\d+') {
             $cleanVersion = "1.0.0"
           }
-          $parts = $cleanVersion.Split('.')
-          $msixVersion = "$($parts[0]).$($parts[1]).$($parts[2]).0"
           "tag=$rawTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "version=$cleanVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "msix_version=$msixVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Building Tag: $rawTag (Version: $cleanVersion, MSIX Version: $msixVersion)"
+          Write-Host "Building Tag: $rawTag (Version: $cleanVersion)"
 
-      - name: Build & Package MSIX Installer (TomatoMix.msix)
+      - name: Build WiX MSI Installer (TomatoMix.msi)
         shell: powershell
-        env:
-          WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
-          WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
         run: |
           $ErrorActionPreference = "Stop"
 
-          $msixStageDir = ".\dist\msix-stage"
-          $msixAssetsDir = Join-Path $msixStageDir "Assets"
-          New-Item -ItemType Directory -Path $msixAssetsDir -Force | Out-Null
+          $publishDir = Join-Path $PWD "dist\publish"
+          $toolsDir = Join-Path $PWD "dist\tools"
+          New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
+          New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
 
-          # 1. Publish self-contained win-x64 build into MSIX staging folder
+          # 1. Publish self-contained win-x64 build
           dotnet publish .\TomatoMix.csproj `
             -c Release `
             -r win-x64 `
@@ -75,128 +70,75 @@ jobs:
             -p:Version=${{ steps.version.outputs.version }} `
             -p:DebugType=None `
             -p:DebugSymbols=false `
-            -o $msixStageDir
+            -o $publishDir
 
-          # 2. Prepare signing certificate (from GitHub Secret PFX if available, otherwise generate self-signed)
-          $pfxPath = ".\dist\signing.pfx"
-          if (![string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_BASE64)) {
-            Write-Host "Using PFX certificate from GitHub Secrets..."
-            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
-            $pfxPassword = $env:WINDOWS_PFX_PASSWORD
-            $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($pfxPath, $pfxPassword)
-            $publisher = $cert.Subject
-            Export-Certificate -Cert $cert -FilePath ".\dist\TomatoMix.cer" | Out-Null
-          } else {
-            Write-Host "Generating self-signed MSIX certificate in CI..."
-            $publisher = "CN=TomatoMix"
-            $pfxPassword = [Guid]::NewGuid().ToString("N")
-            $securePwd = ConvertTo-SecureString -String $pfxPassword -Force -AsPlainText
-            $cert = New-SelfSignedCertificate `
-              -Type Custom `
-              -Subject $publisher `
-              -KeyUsage DigitalSignature `
-              -FriendlyName "TomatoMix Audio Mixer" `
-              -CertStoreLocation "Cert:\CurrentUser\My" `
-              -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
-            Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $securePwd | Out-Null
-            Export-Certificate -Cert $cert -FilePath ".\dist\TomatoMix.cer" | Out-Null
-            Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force -ErrorAction SilentlyContinue
-          }
+          # 2. Install WiX v5 CLI into local temporary tool path
+          dotnet tool install wix --version 5.0.2 --tool-path $toolsDir
+          $wixExe = Join-Path $toolsDir "wix.exe"
 
-          # 3. Generate required MSIX visual PNG assets from Assets\app.ico
-          Add-Type -AssemblyName System.Windows.Forms
-          Add-Type -AssemblyName System.Drawing
+          # 3. Dynamically generate WiX source (TomatoMix.wxs)
           $icoPath = (Resolve-Path ".\Assets\app.ico").Path
-          function New-MsixPngAsset([string]$outPath, [int]$width, [int]$height) {
-            $icon = New-Object System.Drawing.Icon($icoPath, 256, 256)
-            $srcBmp = $icon.ToBitmap()
-            $dstBmp = New-Object System.Drawing.Bitmap($width, $height)
-            $g = [System.Drawing.Graphics]::FromImage($dstBmp)
-            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-            $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-            $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-            $g.Clear([System.Drawing.Color]::Transparent)
-            $g.DrawImage($srcBmp, 0, 0, $width, $height)
-            $dstBmp.Save($outPath, [System.Drawing.Imaging.ImageFormat]::Png)
-            $g.Dispose()
-            $dstBmp.Dispose()
-            $srcBmp.Dispose()
-            $icon.Dispose()
-          }
+          $wxsPath = ".\dist\TomatoMix.wxs"
+          $wxsContent = @"
+          <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+            <Package
+              Name="TomatoMix Audio Mixer"
+              Manufacturer="TomatoMix"
+              Version="${{ steps.version.outputs.version }}"
+              UpgradeCode="8F64B3A9-4A31-428C-9F35-720E810C99B4"
+              Scope="perUser"
+              Compressed="yes">
 
-          New-MsixPngAsset (Join-Path $msixAssetsDir "StoreLogo.png") 50 50
-          New-MsixPngAsset (Join-Path $msixAssetsDir "Square44x44Logo.png") 44 44
-          New-MsixPngAsset (Join-Path $msixAssetsDir "Square150x150Logo.png") 150 150
+              <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+              <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
-          # 4. Generate AppxManifest.xml dynamically
-          $escapedPublisher = [System.Security.SecurityElement]::Escape($publisher)
-          $manifestPath = Join-Path $msixStageDir "AppxManifest.xml"
-          $manifestXml = @"
-          <?xml version="1.0" encoding="utf-8"?>
-          <Package
-            xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
-            xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
-            xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-            IgnorableNamespaces="uap rescap">
+              <Icon Id="AppIcon.ico" SourceFile="$icoPath" />
+              <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
 
-            <Identity
-              Name="TomatoMix.AudioMixer"
-              Publisher="$escapedPublisher"
-              Version="${{ steps.version.outputs.msix_version }}"
-              ProcessorArchitecture="x64" />
+              <StandardDirectory Id="LocalAppDataFolder">
+                <Directory Id="ProgramsFolder" Name="Programs">
+                  <Directory Id="INSTALLFOLDER" Name="TomatoMix" />
+                </Directory>
+              </StandardDirectory>
 
-            <Properties>
-              <DisplayName>TomatoMix Audio Mixer</DisplayName>
-              <PublisherDisplayName>TomatoMix</PublisherDisplayName>
-              <Logo>Assets\StoreLogo.png</Logo>
-            </Properties>
+              <StandardDirectory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="TomatoMix" />
+              </StandardDirectory>
 
-            <Dependencies>
-              <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
-            </Dependencies>
+              <StandardDirectory Id="DesktopFolder" />
 
-            <Resources>
-              <Resource Language="en-us" />
-            </Resources>
-
-            <Applications>
-              <Application Id="TomatoMix" Executable="TomatoMix.exe" EntryPoint="Windows.FullTrustApplication">
-                <uap:VisualElements
-                  DisplayName="TomatoMix Audio Mixer"
-                  Description="Multi-Channel Application Audio Router, Mixer &amp; 10-Band Equalizer"
-                  BackgroundColor="transparent"
-                  Square150x150Logo="Assets\Square150x150Logo.png"
-                  Square44x44Logo="Assets\Square44x44Logo.png" />
-              </Application>
-            </Applications>
-
-            <Capabilities>
-              <rescap:Capability Name="runFullTrust" />
-            </Capabilities>
-          </Package>
+              <Feature Id="MainFeature" Title="TomatoMix Audio Mixer" Level="1">
+                <Files Directory="INSTALLFOLDER" Include="$publishDir\**">
+                  <Exclude Files="$publishDir\TomatoMix.exe" />
+                </Files>
+                <Component Id="MainExecutable" Directory="INSTALLFOLDER">
+                  <File Id="TomatoMixExe" Source="$publishDir\TomatoMix.exe" KeyPath="yes">
+                    <Shortcut
+                      Id="StartMenuShortcut"
+                      Directory="ApplicationProgramsFolder"
+                      Name="TomatoMix Audio Mixer"
+                      Description="Multi-Channel Application Audio Router, Mixer &amp; 10-Band Equalizer"
+                      WorkingDirectory="INSTALLFOLDER"
+                      Icon="AppIcon.ico" />
+                    <Shortcut
+                      Id="DesktopShortcut"
+                      Directory="DesktopFolder"
+                      Name="TomatoMix Audio Mixer"
+                      Description="Multi-Channel Application Audio Router, Mixer &amp; 10-Band Equalizer"
+                      WorkingDirectory="INSTALLFOLDER"
+                      Icon="AppIcon.ico" />
+                  </File>
+                  <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+                </Component>
+              </Feature>
+            </Package>
+          </Wix>
           "@
-          Set-Content -Path $manifestPath -Value $manifestXml.Trim() -Encoding UTF8
+          Set-Content -Path $wxsPath -Value $wxsContent.Trim() -Encoding UTF8
 
-          # 5. Locate Windows SDK tools (makeappx.exe and signtool.exe) and pack + sign MSIX
-          $makeappx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe" -ErrorAction SilentlyContinue |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1 -ExpandProperty FullName
-          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1 -ExpandProperty FullName
-          if ([string]::IsNullOrWhiteSpace($makeappx) -or [string]::IsNullOrWhiteSpace($signtool)) {
-            throw "Windows 10/11 SDK x64 makeappx.exe or signtool.exe not found."
-          }
-
-          $msixOut = ".\dist\TomatoMix.msix"
-
-          & $makeappx pack /d $msixStageDir /p $msixOut /o
-          if ($LASTEXITCODE -ne 0) { throw "makeappx pack failed with exit code $LASTEXITCODE" }
-
-          & $signtool sign /fd SHA256 /a /f $pfxPath /p $pfxPassword $msixOut
-          if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE" }
-
-          Remove-Item $pfxPath -Force -ErrorAction SilentlyContinue
+          # 4. Build TomatoMix.msi
+          & $wixExe build $wxsPath -arch x64 -o ".\dist\TomatoMix.msi"
+          if ($LASTEXITCODE -ne 0) { throw "wix build failed with exit code $LASTEXITCODE" }
 
       - name: Build Portable Single-File TomatoMix.exe
         shell: pwsh
@@ -220,8 +162,7 @@ jobs:
         with:
           name: TomatoMix-Windows-x64-${{ steps.version.outputs.tag }}
           path: |
-            dist/TomatoMix.msix
-            dist/TomatoMix.cer
+            dist/TomatoMix.msi
             dist/TomatoMix-Portable.exe
           if-no-files-found: error
 
@@ -235,6 +176,5 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            dist/TomatoMix.msix
-            dist/TomatoMix.cer
+            dist/TomatoMix.msi
             dist/TomatoMix-Portable.exe
