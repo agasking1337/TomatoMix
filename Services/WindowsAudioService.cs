@@ -14,6 +14,9 @@ public class WindowsAudioService : IDisposable
     private MMDevice? _activeDevice;
     private MMDevice? _activeMicDevice;
     private readonly object _lock = new();
+    private const long PidCacheTtl = 30_000;
+    private readonly record struct PidInfo(string? Key, string? DisplayName, string? ExePath, long Stamp);
+    private readonly Dictionary<int, PidInfo> _pidInfoCache = new();
     private readonly Dictionary<string, AvaloniaBitmap?> _iconCache = new(StringComparer.OrdinalIgnoreCase);
 
     public List<AudioDeviceInfo> GetInputDevices()
@@ -298,6 +301,12 @@ public class WindowsAudioService : IDisposable
                 sessionManager.RefreshSessions();
                 var sessions = sessionManager.Sessions;
                 int currentAppPid = Environment.ProcessId;
+                long now = Environment.TickCount64;
+                if (_pidInfoCache.Count > 512)
+                {
+                    foreach (var k in _pidInfoCache.Where(kv => now - kv.Value.Stamp >= PidCacheTtl).Select(kv => kv.Key).ToList())
+                        _pidInfoCache.Remove(k);
+                }
 
                 var groupedByKey = new Dictionary<string, AudioSessionData>(StringComparer.OrdinalIgnoreCase);
 
@@ -326,47 +335,62 @@ public class WindowsAudioService : IDisposable
                         }
                         else
                         {
-                            try
+                            if (_pidInfoCache.TryGetValue(pid, out var cachedInfo) && now - cachedInfo.Stamp < PidCacheTtl)
                             {
-                                using var proc = Process.GetProcessById(pid);
-                                string procName = proc.ProcessName;
-                                if (string.IsNullOrWhiteSpace(procName))
-                                    continue;
-
-                                processKey = procName.ToLowerInvariant();
-                                try
-                                {
-                                    exePath = proc.MainModule?.FileName;
-                                }
-                                catch
-                                {
-                                }
-
-                                string? title = null;
-                                try
-                                {
-                                    if (!string.IsNullOrWhiteSpace(exePath))
-                                    {
-                                        var versionInfo = FileVersionInfo.GetVersionInfo(exePath);
-                                        title = versionInfo.FileDescription;
-                                    }
-                                }
-                                catch
-                                {
-                                }
-
-                                if (string.IsNullOrWhiteSpace(title))
-                                {
-                                    title = !string.IsNullOrWhiteSpace(s.DisplayName) && !s.DisplayName.StartsWith("@")
-                                        ? s.DisplayName
-                                        : FormatProcessName(procName);
-                                }
-
-                                displayName = title!;
+                                if (cachedInfo.Key == null) continue;
+                                processKey = cachedInfo.Key;
+                                displayName = cachedInfo.DisplayName!;
+                                exePath = cachedInfo.ExePath;
                             }
-                            catch
+                            else
                             {
-                                continue;
+                                try
+                                {
+                                    using var proc = Process.GetProcessById(pid);
+                                    string procName = proc.ProcessName;
+                                    if (string.IsNullOrWhiteSpace(procName))
+                                    {
+                                        _pidInfoCache[pid] = new PidInfo(null, null, null, now);
+                                        continue;
+                                    }
+
+                                    processKey = procName.ToLowerInvariant();
+                                    try
+                                    {
+                                        exePath = proc.MainModule?.FileName;
+                                    }
+                                    catch
+                                    {
+                                    }
+
+                                    string? title = null;
+                                    try
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(exePath))
+                                        {
+                                            var versionInfo = FileVersionInfo.GetVersionInfo(exePath);
+                                            title = versionInfo.FileDescription;
+                                        }
+                                    }
+                                    catch
+                                    {
+                                    }
+
+                                    if (string.IsNullOrWhiteSpace(title))
+                                    {
+                                        title = !string.IsNullOrWhiteSpace(s.DisplayName) && !s.DisplayName.StartsWith("@")
+                                            ? s.DisplayName
+                                            : FormatProcessName(procName);
+                                    }
+
+                                    displayName = title!;
+                                    _pidInfoCache[pid] = new PidInfo(processKey, displayName, exePath, now);
+                                }
+                                catch
+                                {
+                                    _pidInfoCache[pid] = new PidInfo(null, null, null, now);
+                                    continue;
+                                }
                             }
                         }
 
@@ -457,14 +481,22 @@ public class WindowsAudioService : IDisposable
                         }
                         else
                         {
-                            try
+                            if (_pidInfoCache.TryGetValue(pid, out var cachedInfo) && Environment.TickCount64 - cachedInfo.Stamp < PidCacheTtl)
                             {
-                                using var proc = Process.GetProcessById(pid);
-                                key = proc.ProcessName.ToLowerInvariant();
+                                if (cachedInfo.Key == null) continue;
+                                key = cachedInfo.Key;
                             }
-                            catch
+                            else
                             {
-                                continue;
+                                try
+                                {
+                                    using var proc = Process.GetProcessById(pid);
+                                    key = proc.ProcessName.ToLowerInvariant();
+                                }
+                                catch
+                                {
+                                    continue;
+                                }
                             }
                         }
 

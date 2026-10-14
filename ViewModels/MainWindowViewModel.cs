@@ -285,7 +285,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _config.ActiveMicEqProfileName = mic.ActiveEqProfileName;
         _config.MicEqPreampDb = mic.EqPreampDb;
         _config.MicEqGainsDb = (double[])mic.EqGainsDb.Clone();
-        _configService.Save(_config);
+        SchedulePersist();
 
         if (IsMicMonitoring)
         {
@@ -295,7 +295,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (EqTargetChannel == mic)
         {
             RefreshLargeEqCurve();
-            SyncHardwareEqualizerApo();
+            ScheduleApoSync();
         }
     }
 
@@ -827,7 +827,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         _config.AppRelativeVolumes[app.ProcessKey] = Math.Clamp(app.RelativeVolume / 100.0, 0.0, 1.0);
         ApplySingleAppVolumeToAudioEngine(app);
-        _configService.Save(_config);
+        SchedulePersist();
     }
 
     public void MoveAppToChannelInternal(AppSessionViewModel app, string targetChannelId)
@@ -989,12 +989,54 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             ch.IsEffectivelyMuted = ch.IsMuted || (anySolo && !ch.IsSolo);
             foreach (var app in ch.Apps)
             {
-                ApplySingleAppVolumeToAudioEngine(app, ch, anySolo);
+                ApplySingleAppVolumeToAudioEngine(app, ch, anySolo, false);
             }
+        }
+        ScheduleApoSync();
+    }
+
+    private DispatcherTimer? _persistTimer;
+    private bool _pendingSave;
+    private bool _pendingApoSync;
+
+    private void SchedulePersist()
+    {
+        _pendingSave = true;
+        EnsurePersistTimer();
+    }
+
+    private void ScheduleApoSync()
+    {
+        _pendingApoSync = true;
+        EnsurePersistTimer();
+    }
+
+    private void EnsurePersistTimer()
+    {
+        if (_persistTimer == null)
+        {
+            _persistTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            _persistTimer.Tick += (_, _) => FlushPersist();
+        }
+        if (!_persistTimer.IsEnabled) _persistTimer.Start();
+    }
+
+    private void FlushPersist()
+    {
+        _persistTimer?.Stop();
+        if (_pendingSave)
+        {
+            _pendingSave = false;
+            _configService.Save(_config);
+        }
+        if (_pendingApoSync)
+        {
+            _pendingApoSync = false;
+            SyncHardwareEqualizerApo();
         }
     }
 
-    private void ApplySingleAppVolumeToAudioEngine(AppSessionViewModel app, ChannelViewModel? channel = null, bool? anySoloOverride = null)
+    private void ApplySingleAppVolumeToAudioEngine(AppSessionViewModel app, ChannelViewModel? channel = null, bool? anySoloOverride = null, bool syncApo = true)
     {
         channel ??= Channels.FirstOrDefault(c => c.Id.Equals(app.ChannelId, StringComparison.OrdinalIgnoreCase));
         if (channel == null) return;
@@ -1024,7 +1066,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                               * eqTrimScalar;
 
         _audioService.ApplyProcessVolume(app.ProcessKey, (float)effectiveVol, effectiveMute);
-        SyncHardwareEqualizerApo();
+        if (syncApo) ScheduleApoSync();
     }
 
     private void SaveChannelStateToConfig()
@@ -1039,13 +1081,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _config.MicEqPreampDb = MicChannel.EqPreampDb;
             _config.MicEqGainsDb = (double[])MicChannel.EqGainsDb.Clone();
         }
-        _configService.Save(_config);
-        SyncHardwareEqualizerApo();
+        SchedulePersist();
+        ScheduleApoSync();
     }
 
     public void Dispose()
     {
         _meterTimer.Stop();
+        FlushPersist();
         _dspEngine.Dispose();
         _audioService.Dispose();
     }

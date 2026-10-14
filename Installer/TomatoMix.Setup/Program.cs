@@ -321,296 +321,122 @@ internal static class Program
 
 internal sealed class SetupWizardForm : Form
 {
-    private readonly TextBox _pathBox;
-    private readonly CheckBox _desktopCheck;
-    private readonly CheckBox _startMenuCheck;
-    private readonly CheckBox _startupCheck;
-    private readonly CheckBox _launchAfterCheck;
-    private readonly ProgressBar _progressBar;
-    private readonly Label _statusLabel;
-    private readonly Button _installButton;
-    private readonly Button _browseButton;
-    private readonly Button _cancelButton;
+    private readonly TextBox _pathBox = new();
+    private readonly CheckBox _desktopCheck = new() { Text = "Create a desktop shortcut", Checked = true, AutoSize = true };
+    private readonly CheckBox _startMenuCheck = new() { Text = "Create Start Menu shortcuts", Checked = true, AutoSize = true };
+    private readonly CheckBox _startupCheck = new() { Text = "Start TomatoMix when Windows starts", AutoSize = true };
+    private readonly CheckBox _launchAfterCheck = new() { Text = "Launch TomatoMix when setup finishes", Checked = true, AutoSize = true };
+    private readonly ProgressBar _progressBar = new() { Minimum = 0, Maximum = 100 };
+    private readonly Label _statusLabel = new() { Text = "Ready to install.", AutoSize = false };
+    private readonly Button _installButton = new() { Text = "Install" };
+    private readonly Button _browseButton = new() { Text = "Browse..." };
+    private readonly Button _cancelButton = new() { Text = "Cancel" };
     private bool _isInstalled;
 
     public SetupWizardForm(string defaultInstallDir)
     {
-        Text = "TomatoMix Audio Mixer - Setup";
-        Size = new Size(560, 440);
+        Text = "TomatoMix Setup";
+        ClientSize = new Size(460, 290);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
+        MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Color.FromArgb(16, 19, 27);
-        ForeColor = Color.FromArgb(241, 245, 249);
-        Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
+        Font = SystemFonts.MessageBoxFont ?? Font;
 
         try
         {
             using var icoStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("TomatoMix.App.ico");
-            if (icoStream != null)
-            {
-                Icon = new Icon(icoStream);
-            }
+            if (icoStream != null) Icon = new Icon(icoStream);
         }
         catch
         {
         }
 
-        // Top Accent Strip
-        var accentStrip = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 4,
-            BackColor = Color.FromArgb(255, 85, 0)
-        };
-        Controls.Add(accentStrip);
-
-        // Header Panel
-        var headerPanel = new Panel
-        {
-            Location = new Point(0, 4),
-            Size = new Size(560, 76),
-            BackColor = Color.FromArgb(21, 25, 36)
-        };
-
-        var titleLabel = new Label
-        {
-            Text = "TOMATOMIX // AUDIO MIXER SETUP",
-            Font = new Font("Segoe UI", 13f, FontStyle.Bold),
-            ForeColor = Color.White,
-            Location = new Point(24, 16),
-            AutoSize = true
-        };
-
-        var subLabel = new Label
-        {
-            Text = "Install Multi-Channel Application Audio Router, Mic DSP & 10-Band Equalizer (v1.0.0)",
-            Font = new Font("Segoe UI", 9f, FontStyle.Regular),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            Location = new Point(24, 44),
-            AutoSize = true
-        };
-
-        headerPanel.Controls.Add(titleLabel);
-        headerPanel.Controls.Add(subLabel);
-        Controls.Add(headerPanel);
-
-        // Install Folder Label
-        var dirLabel = new Label
-        {
-            Text = "INSTALLATION DIRECTORY",
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            Location = new Point(24, 98),
-            AutoSize = true
-        };
-        Controls.Add(dirLabel);
-
-        _pathBox = new TextBox
-        {
-            Text = defaultInstallDir,
-            Location = new Point(24, 120),
-            Size = new Size(406, 28),
-            BackColor = Color.FromArgb(25, 30, 43),
-            ForeColor = Color.White,
-            BorderStyle = BorderStyle.FixedSingle,
-            Font = new Font("Segoe UI", 9.5f)
-        };
-        Controls.Add(_pathBox);
-
-        _browseButton = new Button
-        {
-            Text = "BROWSE...",
-            Location = new Point(438, 119),
-            Size = new Size(88, 27),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(30, 36, 50),
-            ForeColor = Color.White,
-            Cursor = Cursors.Hand
-        };
-        _browseButton.FlatAppearance.BorderColor = Color.FromArgb(51, 65, 85);
+        var dirLabel = new Label { Text = "Install location:", Location = new Point(16, 16), AutoSize = true };
+        _pathBox.Text = defaultInstallDir;
+        _pathBox.Location = new Point(16, 38);
+        _pathBox.Size = new Size(342, 23);
+        _browseButton.Location = new Point(366, 37);
+        _browseButton.Size = new Size(78, 25);
         _browseButton.Click += (_, _) =>
         {
-            using var dlg = new FolderBrowserDialog
-            {
-                SelectedPath = _pathBox.Text,
-                Description = "Select destination folder for TomatoMix Audio Mixer"
-            };
-            if (dlg.ShowDialog(this) == DialogResult.OK)
-            {
-                _pathBox.Text = dlg.SelectedPath;
-            }
+            using var dlg = new FolderBrowserDialog { SelectedPath = _pathBox.Text };
+            if (dlg.ShowDialog(this) == DialogResult.OK) _pathBox.Text = dlg.SelectedPath;
         };
-        Controls.Add(_browseButton);
 
-        // Options Checkboxes
-        _desktopCheck = new CheckBox
-        {
-            Text = "Create a Desktop shortcut",
-            Checked = true,
-            Location = new Point(26, 166),
-            AutoSize = true,
-            ForeColor = Color.FromArgb(226, 232, 240)
-        };
-        Controls.Add(_desktopCheck);
+        _desktopCheck.Location = new Point(16, 80);
+        _startMenuCheck.Location = new Point(16, 106);
+        _startupCheck.Location = new Point(16, 132);
+        _launchAfterCheck.Location = new Point(16, 158);
 
-        _startMenuCheck = new CheckBox
-        {
-            Text = "Create Start Menu program shortcuts",
-            Checked = true,
-            Location = new Point(26, 194),
-            AutoSize = true,
-            ForeColor = Color.FromArgb(226, 232, 240)
-        };
-        Controls.Add(_startMenuCheck);
+        _statusLabel.Location = new Point(16, 196);
+        _statusLabel.Size = new Size(428, 18);
+        _progressBar.Location = new Point(16, 218);
+        _progressBar.Size = new Size(428, 16);
 
-        _startupCheck = new CheckBox
-        {
-            Text = "Launch TomatoMix automatically when Windows starts",
-            Checked = false,
-            Location = new Point(26, 222),
-            AutoSize = true,
-            ForeColor = Color.FromArgb(226, 232, 240)
-        };
-        Controls.Add(_startupCheck);
-
-        _launchAfterCheck = new CheckBox
-        {
-            Text = "Launch TomatoMix Audio Mixer when setup finishes",
-            Checked = true,
-            Location = new Point(26, 250),
-            AutoSize = true,
-            ForeColor = Color.FromArgb(255, 110, 38),
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
-        };
-        Controls.Add(_launchAfterCheck);
-
-        // Status & Progress Bar
-        _statusLabel = new Label
-        {
-            Text = "Ready to install TomatoMix Audio Mixer.",
-            Location = new Point(24, 292),
-            Size = new Size(500, 20),
-            ForeColor = Color.FromArgb(148, 163, 184)
-        };
-        Controls.Add(_statusLabel);
-
-        _progressBar = new ProgressBar
-        {
-            Location = new Point(24, 316),
-            Size = new Size(502, 16),
-            Minimum = 0,
-            Maximum = 100,
-            Value = 0,
-            Style = ProgressBarStyle.Continuous
-        };
-        Controls.Add(_progressBar);
-
-        // Bottom Buttons
-        _cancelButton = new Button
-        {
-            Text = "CANCEL",
-            Location = new Point(310, 352),
-            Size = new Size(98, 34),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(30, 36, 50),
-            ForeColor = Color.FromArgb(203, 213, 225),
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor = Cursors.Hand
-        };
-        _cancelButton.FlatAppearance.BorderColor = Color.FromArgb(51, 65, 85);
-        _cancelButton.Click += (_, _) => Close();
-        Controls.Add(_cancelButton);
-
-        _installButton = new Button
-        {
-            Text = "INSTALL NOW",
-            Location = new Point(416, 352),
-            Size = new Size(110, 34),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(255, 85, 0),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-            Cursor = Cursors.Hand
-        };
-        _installButton.FlatAppearance.BorderSize = 0;
+        _installButton.Location = new Point(288, 250);
+        _installButton.Size = new Size(75, 27);
         _installButton.Click += OnInstallClicked;
-        Controls.Add(_installButton);
+        _cancelButton.Location = new Point(369, 250);
+        _cancelButton.Size = new Size(75, 27);
+        _cancelButton.Click += (_, _) => Close();
+
+        AcceptButton = _installButton;
+        CancelButton = _cancelButton;
+        Controls.AddRange([dirLabel, _pathBox, _browseButton, _desktopCheck, _startMenuCheck, _startupCheck, _launchAfterCheck, _statusLabel, _progressBar, _installButton, _cancelButton]);
     }
 
     private async void OnInstallClicked(object? sender, EventArgs e)
     {
+        string targetDir = _pathBox.Text.Trim();
+
         if (_isInstalled)
         {
-            if (_launchAfterCheck.Checked)
+            string exe = Path.Combine(targetDir, "TomatoMix.exe");
+            if (_launchAfterCheck.Checked && File.Exists(exe))
             {
-                string exe = Path.Combine(_pathBox.Text.Trim(), "TomatoMix.exe");
-                if (File.Exists(exe))
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = exe,
-                        WorkingDirectory = _pathBox.Text.Trim(),
-                        UseShellExecute = true
-                    });
-                }
+                Process.Start(new ProcessStartInfo { FileName = exe, WorkingDirectory = targetDir, UseShellExecute = true });
             }
             Close();
             return;
         }
 
-        string targetDir = _pathBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(targetDir))
         {
-            MessageBox.Show(this, "Please choose a valid installation directory.", "Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "Please choose a valid installation folder.", "Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        _installButton.Enabled = false;
-        _browseButton.Enabled = false;
-        _pathBox.ReadOnly = true;
-        _desktopCheck.Enabled = false;
-        _startMenuCheck.Enabled = false;
-        _startupCheck.Enabled = false;
+        foreach (Control c in new Control[] { _installButton, _browseButton, _pathBox, _desktopCheck, _startMenuCheck, _startupCheck })
+            c.Enabled = false;
 
-        bool desktop = _desktopCheck.Checked;
-        bool startMenu = _startMenuCheck.Checked;
-        bool startup = _startupCheck.Checked;
+        bool desktop = _desktopCheck.Checked, startMenu = _startMenuCheck.Checked, startup = _startupCheck.Checked;
 
         try
         {
-            await Task.Run(() =>
+            await Task.Run(() => Program.InstallApplication(targetDir, desktop, startMenu, startup, (pct, msg) =>
             {
-                Program.InstallApplication(
-                    targetDir,
-                    desktop,
-                    startMenu,
-                    startup,
-                    (pct, msg) =>
+                if (!IsDisposed)
+                {
+                    BeginInvoke(() =>
                     {
-                        if (!IsDisposed)
-                        {
-                            BeginInvoke(() =>
-                            {
-                                _progressBar.Value = Math.Clamp(pct, 0, 100);
-                                _statusLabel.Text = msg;
-                            });
-                        }
+                        _progressBar.Value = Math.Clamp(pct, 0, 100);
+                        _statusLabel.Text = msg;
                     });
-            });
+                }
+            }));
 
             _isInstalled = true;
-            _installButton.Text = "FINISH";
-            _installButton.BackColor = Color.FromArgb(16, 185, 129);
+            _statusLabel.Text = "Installation complete.";
+            _installButton.Text = "Finish";
             _installButton.Enabled = true;
             _cancelButton.Visible = false;
         }
         catch (Exception ex)
         {
-            _statusLabel.Text = $"Installation failed: {ex.Message}";
-            _installButton.Enabled = true;
-            _browseButton.Enabled = true;
-            _pathBox.ReadOnly = false;
+            _statusLabel.Text = "Installation failed.";
+            foreach (Control c in new Control[] { _installButton, _browseButton, _pathBox, _desktopCheck, _startMenuCheck, _startupCheck })
+                c.Enabled = true;
             MessageBox.Show(this, $"Failed to install TomatoMix:\n{ex.Message}", "Setup Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
