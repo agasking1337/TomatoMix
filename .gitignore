@@ -1,0 +1,23 @@
+# .NET Build & Publish Outputs
+bin/
+obj/
+dist/
+out/
+publish/
+
+# Installer temporary payload
+Installer/TomatoMix.Setup/payload.zip
+
+# IDE & User-specific files
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# OS files
+Thumbs.db
+.DS_Store
