@@ -12,11 +12,74 @@ public partial class MainWindow : Window
 {
     private AppSessionViewModel? _draggedApp;
 
+    public bool IsExplicitExitRequested { get; set; }
+
     public MainWindow()
     {
         InitializeComponent();
         AddHandler(DragDrop.DragOverEvent, OnChannelDragOver);
         AddHandler(DragDrop.DropEvent, OnChannelDrop);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == WindowStateProperty
+            && change.NewValue is WindowState newState
+            && newState == WindowState.Minimized
+            && DataContext is MainWindowViewModel vm
+            && vm.MinimizeToTray)
+        {
+            HideToTray();
+        }
+    }
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        if (!IsExplicitExitRequested
+            && e.CloseReason == WindowCloseReason.WindowClosing
+            && DataContext is MainWindowViewModel vm
+            && vm.CloseToTray)
+        {
+            e.Cancel = true;
+            HideToTray();
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
+    public void HideToTray()
+    {
+        ShowInTaskbar = false;
+        Hide();
+        if (DataContext is MainWindowViewModel vm)
+        {
+            vm.SetBackgroundMode(true);
+        }
+    }
+
+    public void RestoreFromTray()
+    {
+        if (DataContext is MainWindowViewModel vm)
+        {
+            vm.SetBackgroundMode(false);
+        }
+
+        ShowInTaskbar = true;
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+        Focus();
     }
 
     private async void OnAppCardPointerPressed(object? sender, PointerPressedEventArgs e)

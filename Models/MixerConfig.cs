@@ -3,6 +3,10 @@ namespace TomatoMix.Models;
 public class MixerConfig
 {
     public bool IsDarkTheme { get; set; } = true;
+    public bool CloseToTray { get; set; } = true;
+    public bool MinimizeToTray { get; set; }
+    public bool StartMinimizedToTray { get; set; }
+    public bool RunAtWindowsStartup { get; set; }
     public string? SelectedDeviceId { get; set; }
     public string? SelectedMicDeviceId { get; set; }
     public double MasterVolume { get; set; } = 1.0;

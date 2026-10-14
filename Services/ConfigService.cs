@@ -1,10 +1,14 @@
 using System.Text.Json;
+using Microsoft.Win32;
 using TomatoMix.Models;
 
 namespace TomatoMix.Services;
 
 public class ConfigService
 {
+    private const string StartupRegistryKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string StartupValueName = "TomatoMix";
+
     private readonly string _configPath;
     private readonly string _profilesDir;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -57,6 +61,7 @@ public class ConfigService
 
                     // Also load any standalone .eqprofile.json files in EqProfiles folder
                     LoadExternalProfileFiles(cfg);
+                    cfg.RunAtWindowsStartup = IsWindowsStartupEnabled();
                     return cfg;
                 }
             }
@@ -65,7 +70,60 @@ public class ConfigService
         {
         }
 
-        return CreateDefaultConfig();
+        var defaultCfg = CreateDefaultConfig();
+        defaultCfg.RunAtWindowsStartup = IsWindowsStartupEnabled();
+        return defaultCfg;
+    }
+
+    public static bool IsWindowsStartupEnabled()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKeyPath, writable: false);
+            var val = key?.GetValue(StartupValueName) as string;
+            return !string.IsNullOrWhiteSpace(val);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static bool SetWindowsStartup(bool enabled, bool startMinimized)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKeyPath, writable: true)
+                            ?? Registry.CurrentUser.CreateSubKey(StartupRegistryKeyPath, writable: true);
+            if (key == null) return false;
+
+            if (enabled)
+            {
+                string? exePath = Environment.ProcessPath;
+                if (string.IsNullOrWhiteSpace(exePath))
+                    return false;
+
+                string command = startMinimized
+                    ? $"\"{exePath}\" --background"
+                    : $"\"{exePath}\" --autostart";
+                key.SetValue(StartupValueName, command, RegistryValueKind.String);
+            }
+            else
+            {
+                if (key.GetValue(StartupValueName) != null)
+                {
+                    key.DeleteValue(StartupValueName, throwOnMissingValue: false);
+                }
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public void Save(MixerConfig config)

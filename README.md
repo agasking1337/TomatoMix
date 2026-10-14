@@ -20,6 +20,11 @@
   - **Equalizer APO Integration**: Automatically syncs active EQ curves to `tomatomix_eq.txt` when Equalizer APO is installed for system-wide hardware output filtering.
 - **Hardware Input & Output Control**
   - Select and control master output and microphone capture devices with live level metering.
+- **Background Process & System Tray Integration**
+  - Runs seamlessly in the Windows System Tray when closed or minimized (`Close to System Tray`, `Minimize to System Tray`), continuously routing newly launched applications and enforcing per-channel volumes, ChatMix, and Equalizer APO curves with low-CPU background polling.
+  - System Tray icon with quick-access context menu (`Open TomatoMix Mixer`, `Hide to Background Tray`, `Mute Master Output`, `Mute Microphone`, `Keep Running in Background`, `Start with Windows`, and `Quit TomatoMix`).
+  - Single-instance enforcement: launching TomatoMix while it is already running in the background automatically brings the existing mixer window to the foreground.
+  - Optional **Start with Windows** auto-launch and **Start Minimized in Tray** (`--background` / `--minimized` / `--tray` CLI flags).
 - **Dark & Light Themes**
   - Instant theme switching with persistent settings stored in `%AppData%\TomatoMix`.
 

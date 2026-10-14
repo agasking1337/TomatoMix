@@ -49,6 +49,25 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isDarkTheme = true;
 
     [ObservableProperty]
+    private bool _closeToTray = true;
+
+    [ObservableProperty]
+    private bool _minimizeToTray;
+
+    [ObservableProperty]
+    private bool _startMinimizedToTray;
+
+    [ObservableProperty]
+    private bool _runAtWindowsStartup;
+
+    [ObservableProperty]
+    private bool _isRunningInBackground;
+
+    public Action? RequestHideToTray { get; set; }
+    public Action? RequestExitApplication { get; set; }
+    public Action? TrayStateChanged { get; set; }
+
+    [ObservableProperty]
     private ChannelViewModel _micChannel = null!;
 
     [ObservableProperty]
@@ -141,6 +160,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public IconName ThemeToggleIcon => IsDarkTheme ? IconName.Sun : IconName.Moon;
     public string ThemeToggleLabel => IsDarkTheme ? "LIGHT" : "DARK";
+    public string BackgroundStatusBadgeText => CloseToTray ? "BACKGROUND TRAY ON" : "BACKGROUND TRAY OFF";
 
     public bool CanDeleteSelectedEqProfile => SelectedEqProfile is { IsBuiltIn: false };
     public string ActiveEqPreampText => ActiveEqPreampDb >= 0 ? $"+{ActiveEqPreampDb:0.0} dB" : $"{ActiveEqPreampDb:0.0} dB";
@@ -174,6 +194,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         _config = _configService.Load();
         _isDarkTheme = _config.IsDarkTheme;
+        _closeToTray = _config.CloseToTray;
+        _minimizeToTray = _config.MinimizeToTray;
+        _startMinimizedToTray = _config.StartMinimizedToTray;
+        _runAtWindowsStartup = _config.RunAtWindowsStartup;
         ThemeTokens.SetTheme(_isDarkTheme);
 
         InitializeEqBands();
@@ -194,6 +218,80 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         };
         _meterTimer.Tick += OnMeterTimerTick;
         _meterTimer.Start();
+    }
+
+    partial void OnCloseToTrayChanged(bool value)
+    {
+        _config.CloseToTray = value;
+        OnPropertyChanged(nameof(BackgroundStatusBadgeText));
+        SchedulePersist();
+        TrayStateChanged?.Invoke();
+        StatusMessage = value
+            ? "BACKGROUND PROCESS: KEEP RUNNING IN SYSTEM TRAY ON CLOSE"
+            : "BACKGROUND PROCESS: EXIT WHEN WINDOW CLOSES";
+    }
+
+    partial void OnMinimizeToTrayChanged(bool value)
+    {
+        _config.MinimizeToTray = value;
+        SchedulePersist();
+        StatusMessage = value
+            ? "MINIMIZE TO SYSTEM TRAY ENABLED"
+            : "MINIMIZE TO TASKBAR ENABLED";
+    }
+
+    partial void OnStartMinimizedToTrayChanged(bool value)
+    {
+        _config.StartMinimizedToTray = value;
+        if (RunAtWindowsStartup)
+        {
+            ConfigService.SetWindowsStartup(true, value);
+        }
+        SchedulePersist();
+        StatusMessage = value
+            ? "STARTUP MODE: LAUNCH MINIMIZED IN SYSTEM TRAY"
+            : "STARTUP MODE: LAUNCH NORMAL WINDOW";
+    }
+
+    partial void OnRunAtWindowsStartupChanged(bool value)
+    {
+        _config.RunAtWindowsStartup = value;
+        ConfigService.SetWindowsStartup(value, StartMinimizedToTray);
+        SchedulePersist();
+        TrayStateChanged?.Invoke();
+        StatusMessage = value
+            ? "WINDOWS STARTUP: AUTO-LAUNCH ENABLED"
+            : "WINDOWS STARTUP: AUTO-LAUNCH DISABLED";
+    }
+
+    public void SetBackgroundMode(bool inBackground)
+    {
+        if (IsRunningInBackground == inBackground)
+            return;
+
+        IsRunningInBackground = inBackground;
+        _meterTimer.Interval = inBackground
+            ? TimeSpan.FromMilliseconds(500) // Low-CPU background session routing & volume enforcement
+            : TimeSpan.FromMilliseconds(50); // 20 FPS live UI metering
+
+        if (!inBackground)
+        {
+            StatusMessage = "SONAR CORE ENGINE ACTIVE";
+            ScanAndRouteAudioSessions();
+        }
+        TrayStateChanged?.Invoke();
+    }
+
+    [RelayCommand]
+    private void HideToTray()
+    {
+        RequestHideToTray?.Invoke();
+    }
+
+    [RelayCommand]
+    private void ExitApplication()
+    {
+        RequestExitApplication?.Invoke();
     }
 
     partial void OnIsDarkThemeChanged(bool value)
@@ -374,6 +472,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _config.MicEqPreampDb = mic.EqPreampDb;
         _config.MicEqGainsDb = (double[])mic.EqGainsDb.Clone();
         SchedulePersist();
+        TrayStateChanged?.Invoke();
 
         if (IsMicMonitoring)
         {
@@ -461,6 +560,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(MasterVolumePercentText));
         RefreshAllStatusBrushes();
+        TrayStateChanged?.Invoke();
         if (_suppressMasterUpdate) return;
 
         _audioService.SetMasterVolume((float)(MasterVolumePercent / 100.0), value);
@@ -1042,7 +1142,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _tickCount++;
 
         var (mVol, mMuted, mPeak) = masterState;
-        MasterPeakLevel = Math.Clamp(mPeak * 100.0, 0.0, 100.0);
+        if (!IsRunningInBackground)
+        {
+            MasterPeakLevel = Math.Clamp(mPeak * 100.0, 0.0, 100.0);
+        }
 
         if (Math.Abs(MasterVolumePercent - mVol * 100.0) > 1.0 || IsMasterMuted != mMuted)
         {
@@ -1053,10 +1156,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         var (micVol, micMuted, micPeak) = micState;
-        double targetMicPeak = micMuted ? 0.0 : Math.Clamp(micPeak * 100.0, 0.0, 100.0);
-        MicChannel.PeakLevel = targetMicPeak >= MicChannel.PeakLevel
-            ? targetMicPeak
-            : Math.Max(0.0, MicChannel.PeakLevel * 0.78);
+        if (!IsRunningInBackground)
+        {
+            double targetMicPeak = micMuted ? 0.0 : Math.Clamp(micPeak * 100.0, 0.0, 100.0);
+            MicChannel.PeakLevel = targetMicPeak >= MicChannel.PeakLevel
+                ? targetMicPeak
+                : Math.Max(0.0, MicChannel.PeakLevel * 0.78);
+        }
 
         if (Math.Abs(MicChannel.VolumePercent - micVol * 100.0) > 1.0 || MicChannel.IsMuted != micMuted)
         {
@@ -1124,19 +1230,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 appVm.ProcessId = session.ProcessId;
             }
 
-            double targetPeak = Math.Clamp(session.CurrentPeak * 100.0, 0.0, 100.0);
-            if (targetPeak >= appVm.PeakLevel)
+            if (!IsRunningInBackground)
             {
-                appVm.PeakLevel = targetPeak;
+                double targetPeak = Math.Clamp(session.CurrentPeak * 100.0, 0.0, 100.0);
+                if (targetPeak >= appVm.PeakLevel)
+                {
+                    appVm.PeakLevel = targetPeak;
+                }
+                else
+                {
+                    appVm.PeakLevel = Math.Max(0.0, appVm.PeakLevel * 0.78);
+                }
+                appVm.AdvanceWaveAnimation();
             }
-            else
-            {
-                appVm.PeakLevel = Math.Max(0.0, appVm.PeakLevel * 0.78);
-            }
-            appVm.AdvanceWaveAnimation();
         }
 
-        if (_tickCount % 20 == 0)
+        if (IsRunningInBackground || _tickCount % 20 == 0)
         {
             var expiredKeys = _allSessionsByKey.Keys.Where(k => !activeKeys.Contains(k)).ToList();
             foreach (var expired in expiredKeys)
@@ -1150,28 +1259,31 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
         }
 
-        bool anySolo = Channels.Any(c => c.IsSolo);
-        foreach (var ch in Channels)
+        if (!IsRunningInBackground)
         {
-            ch.IsEffectivelyMuted = ch.IsMuted || (anySolo && !ch.IsSolo);
-            if (ch.Apps.Count == 0 || ch.IsEffectivelyMuted)
+            bool anySolo = Channels.Any(c => c.IsSolo);
+            foreach (var ch in Channels)
             {
-                ch.PeakLevel = Math.Max(0.0, ch.PeakLevel * 0.75);
+                ch.IsEffectivelyMuted = ch.IsMuted || (anySolo && !ch.IsSolo);
+                if (ch.Apps.Count == 0 || ch.IsEffectivelyMuted)
+                {
+                    ch.PeakLevel = Math.Max(0.0, ch.PeakLevel * 0.75);
+                }
+                else
+                {
+                    double maxAppPeak = ch.Apps.Max(a => a.IsMuted ? 0.0 : a.PeakLevel);
+                    double scaledByFader = maxAppPeak * (ch.VolumePercent / 100.0);
+                    ch.PeakLevel = scaledByFader >= ch.PeakLevel
+                        ? scaledByFader
+                        : Math.Max(0.0, ch.PeakLevel * 0.78);
+                }
             }
-            else
-            {
-                double maxAppPeak = ch.Apps.Max(a => a.IsMuted ? 0.0 : a.PeakLevel);
-                double scaledByFader = maxAppPeak * (ch.VolumePercent / 100.0);
-                ch.PeakLevel = scaledByFader >= ch.PeakLevel
-                    ? scaledByFader
-                    : Math.Max(0.0, ch.PeakLevel * 0.78);
-            }
-        }
 
-        var gameCh = Channels.FirstOrDefault(c => c.Id.Equals("game", StringComparison.OrdinalIgnoreCase));
-        var chatCh = Channels.FirstOrDefault(c => c.Id.Equals("chat", StringComparison.OrdinalIgnoreCase));
-        GameChannelPeakLevel = gameCh?.PeakLevel ?? 0.0;
-        ChatChannelPeakLevel = chatCh?.PeakLevel ?? 0.0;
+            var gameCh = Channels.FirstOrDefault(c => c.Id.Equals("game", StringComparison.OrdinalIgnoreCase));
+            var chatCh = Channels.FirstOrDefault(c => c.Id.Equals("chat", StringComparison.OrdinalIgnoreCase));
+            GameChannelPeakLevel = gameCh?.PeakLevel ?? 0.0;
+            ChatChannelPeakLevel = chatCh?.PeakLevel ?? 0.0;
+        }
 
         TotalRoutedAppsCount = _allSessionsByKey.Count;
     }
