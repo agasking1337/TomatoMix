@@ -129,6 +129,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isEqEditorOpen;
 
     [ObservableProperty]
+    private bool _isSettingsPageOpen;
+
+    [ObservableProperty]
     private ChannelViewModel? _eqTargetChannel;
 
     [ObservableProperty]
@@ -309,6 +312,23 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         IsDarkTheme = !IsDarkTheme;
         StatusMessage = IsDarkTheme ? "THEME: DARK MONOCHROME" : "THEME: LIGHT MONOCHROME";
+    }
+
+    [RelayCommand]
+    private void OpenSettingsPage()
+    {
+        if (IsEqEditorOpen)
+        {
+            CloseEqEditor();
+        }
+
+        IsSettingsPageOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseSettingsPage()
+    {
+        IsSettingsPageOpen = false;
     }
 
     private void RefreshAllStatusBrushes(bool force = false)
@@ -596,6 +616,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public void OpenChannelEqStudio(ChannelViewModel channel)
     {
+        IsSettingsPageOpen = false;
         EqTargetChannel = channel;
         _suppressEqBandSync = true;
         _suppressEqProfileSelection = true;
@@ -966,6 +987,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void OpenAddChannelPopup()
     {
+        IsSettingsPageOpen = false;
         int customIndex = Channels.Count(c => !c.IsPreset);
         NewChannelName = $"CUSTOM {customIndex + 1}";
         NewChannelIconKey = CustomChannelIcons[customIndex % CustomChannelIcons.Length];
