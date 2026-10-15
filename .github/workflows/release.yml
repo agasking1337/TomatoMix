@@ -1,58 +1,58 @@
-name: Build & Release Windows MSI & EXE
+name: Build and Release
 
 on:
   push:
-    tags:
-      - 'v*'
   workflow_dispatch:
-    inputs:
-      tag_name:
-        description: 'Optional tag name to create a GitHub Release (e.g. v1.0.2). Leave empty to only upload workflow artifacts.'
-        required: false
-        default: ''
 
-permissions:
-  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: true
 
 jobs:
   build-and-release:
-    name: Build TomatoMix MSI & Standalone EXE
     runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build]')
+
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Setup .NET 10 SDK
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
           dotnet-quality: 'ga'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
-      - name: Determine Version
+      - name: Extract version from TomatoMix.csproj
         id: version
         shell: pwsh
         run: |
-          if ($env:GITHUB_REF_TYPE -eq 'tag') {
-            $rawTag = $env:GITHUB_REF_NAME
-          } elseif (![string]::IsNullOrWhiteSpace("${{ inputs.tag_name }}")) {
-            $rawTag = "${{ inputs.tag_name }}"
-          } else {
-            [xml]$csproj = Get-Content .\TomatoMix.csproj
-            $projVer = $csproj.Project.PropertyGroup.Version | Select-Object -First 1
-            if ([string]::IsNullOrWhiteSpace($projVer)) { $projVer = "1.0.0" }
-            $rawTag = "v$projVer"
+          [xml]$project = Get-Content .\TomatoMix.csproj -Raw
+          $version = $project.Project.PropertyGroup.Version | Select-Object -First 1
+
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            Write-Error "Could not find Version in TomatoMix.csproj"
+            exit 1
           }
-          $cleanVersion = $rawTag.TrimStart('v', 'V')
-          if ($cleanVersion -notmatch '^\d+\.\d+\.\d+') {
-            $cleanVersion = "1.0.0"
+
+          $version = $version.Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            Write-Error "Version '$version' must use numeric Major.Minor.Patch format for MSI packaging"
+            exit 1
           }
-          "tag=$rawTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "version=$cleanVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Building Tag: $rawTag (Version: $cleanVersion)"
+
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Found version: $version"
 
       - name: Build WiX MSI Installer (TomatoMix.msi)
-        shell: powershell
+        shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -61,7 +61,6 @@ jobs:
           New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
           New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
 
-          # 1. Publish self-contained win-x64 build
           dotnet publish .\TomatoMix.csproj `
             -c Release `
             -r win-x64 `
@@ -71,12 +70,12 @@ jobs:
             -p:DebugType=None `
             -p:DebugSymbols=false `
             -o $publishDir
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish for MSI failed with exit code $LASTEXITCODE" }
 
-          # 2. Install WiX v5 CLI into local temporary tool path
           dotnet tool install wix --version 5.0.2 --tool-path $toolsDir
+          if ($LASTEXITCODE -ne 0) { throw "WiX installation failed with exit code $LASTEXITCODE" }
           $wixExe = Join-Path $toolsDir "wix.exe"
 
-          # 3. Dynamically generate WiX source (TomatoMix.wxs)
           $icoPath = (Resolve-Path ".\Assets\app.ico").Path
           $wxsPath = ".\dist\TomatoMix.wxs"
           $wxsContent = @"
@@ -136,9 +135,8 @@ jobs:
           "@
           Set-Content -Path $wxsPath -Value $wxsContent.Trim() -Encoding UTF8
 
-          # 4. Build TomatoMix.msi
           & $wixExe build $wxsPath -arch x64 -o ".\dist\TomatoMix.msi"
-          if ($LASTEXITCODE -ne 0) { throw "wix build failed with exit code $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "WiX build failed with exit code $LASTEXITCODE" }
 
       - name: Build Portable Single-File TomatoMix.exe
         shell: pwsh
@@ -154,27 +152,105 @@ jobs:
             -p:DebugType=None `
             -p:DebugSymbols=false `
             -o .\dist\portable
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish for portable EXE failed with exit code $LASTEXITCODE" }
 
           Move-Item -Path ".\dist\portable\TomatoMix.exe" -Destination ".\dist\TomatoMix-Portable.exe" -Force
 
       - name: Upload Packages as Workflow Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: TomatoMix-Windows-x64-${{ steps.version.outputs.tag }}
+          name: TomatoMix-Windows-x64-v${{ steps.version.outputs.version }}
           path: |
             dist/TomatoMix.msi
             dist/TomatoMix-Portable.exe
           if-no-files-found: error
 
-      - name: Create GitHub Release & Attach Files
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.tag_name != ''
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: TomatoMix Audio Mixer ${{ steps.version.outputs.tag }}
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-          files: |
-            dist/TomatoMix.msi
-            dist/TomatoMix-Portable.exe
+      - name: Determine release tag
+        id: tag
+        shell: pwsh
+        run: |
+          $baseTag = "v${{ steps.version.outputs.version }}"
+          $tag = $baseTag
+          $buildNumber = 1
+
+          while ($true) {
+            $existingRef = git ls-remote --exit-code --tags origin "refs/tags/$tag" 2>$null
+            $tagExists = $LASTEXITCODE -eq 0
+            if (-not $tagExists) { break }
+
+            $buildNumber++
+            $tag = "$baseTag-$buildNumber"
+            Write-Host "Tag $baseTag exists, trying $tag"
+          }
+
+          if ($buildNumber -eq 1) {
+            $title = "${{ github.event.repository.name }} | $baseTag"
+          } else {
+            $title = "${{ github.event.repository.name }} | $baseTag#$buildNumber"
+          }
+
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "title=$title" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Release tag: $tag (Title: $title)"
+
+      - name: Extract changelog
+        id: changelog
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $newTag = "${{ steps.tag.outputs.tag }}"
+          $notes = ""
+
+          if (Test-Path .\CHANGELOG.md) {
+            $lines = Get-Content .\CHANGELOG.md
+            $headingPattern = "^## \[v?$([regex]::Escape($version))\]"
+            $sectionStart = -1
+
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -match $headingPattern) {
+                $sectionStart = $i + 1
+                break
+              }
+            }
+
+            if ($sectionStart -ge 0) {
+              $sectionLines = [System.Collections.Generic.List[string]]::new()
+              for ($i = $sectionStart; $i -lt $lines.Count; $i++) {
+                if ($lines[$i] -match '^## \[') { break }
+                $sectionLines.Add($lines[$i])
+              }
+              $notes = ($sectionLines -join "`n").Trim()
+            }
+          }
+
+          if ([string]::IsNullOrWhiteSpace($notes)) {
+            $notes = "Release v$version"
+          }
+
+          $previousTag = git describe --tags --abbrev=0 2>$null
+          if ($LASTEXITCODE -ne 0) { $previousTag = "" }
+          if (-not [string]::IsNullOrWhiteSpace($previousTag)) {
+            $compareUrl = "https://github.com/${{ github.repository }}/compare/$($previousTag.Trim())...$newTag"
+            $notes += "`n`n**Full Changelog**: $compareUrl"
+          }
+
+          $delimiter = [Guid]::NewGuid().ToString("N")
+          $output = "body<<$delimiter`n$notes`n$delimiter`n"
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, $output)
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.tag.outputs.title }}
+          RELEASE_NOTES: ${{ steps.changelog.outputs.body }}
+        run: |
+          gh release create $env:RELEASE_TAG `
+            --target $env:GITHUB_SHA `
+            --title $env:RELEASE_TITLE `
+            --notes $env:RELEASE_NOTES `
+            .\dist\TomatoMix.msi `
+            .\dist\TomatoMix-Portable.exe
+
+          if ($LASTEXITCODE -ne 0) { throw "GitHub release creation failed with exit code $LASTEXITCODE" }

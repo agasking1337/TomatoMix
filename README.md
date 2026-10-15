@@ -70,8 +70,9 @@ dotnet publish .\TomatoMix.csproj `
 ## CI/CD & MSI Packaging
 
 Windows `.msi` packaging is generated exclusively in GitHub Actions (`.github/workflows/release.yml`) so no installer projects or `.wxs` files clutter the repository:
-- Triggered automatically when pushing a `v*` tag (e.g., `v1.0.2`) or manually via **Actions -> Build & Release Windows MSI & EXE**.
-- Dynamically generates the WiX v5 definition (`TomatoMix.wxs`) and builds `TomatoMix.msi` alongside `TomatoMix-Portable.exe`.
+- Triggered automatically by pushing a commit whose message contains `[build]`, or manually via **Actions -> Build and Release**.
+- Reads the numeric `Major.Minor.Patch` version from `TomatoMix.csproj`; if that release tag already exists, it adds a build suffix (for example, `v1.0.0-2`).
+- Dynamically generates the WiX v5 definition (`TomatoMix.wxs`) and publishes `TomatoMix.msi` alongside `TomatoMix-Portable.exe` as workflow artifacts and GitHub release assets.
 
 ---
 

@@ -68,6 +68,7 @@ public partial class App : Application
             }
 
             desktop.Exit += (_, _) => CleanupResources();
+            _ = _mainViewModel.CheckForUpdatesAsync();
         }
 
         base.OnFrameworkInitializationCompleted();

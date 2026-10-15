@@ -201,7 +201,7 @@
         </Style>
     </Window.Styles>
 
-    <Grid RowDefinitions="Auto,*,Auto">
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
 
         <!-- ==================== TOP NAVIGATION & HEADER BAR ==================== -->
         <Border Grid.Row="0"
@@ -274,7 +274,35 @@
         </Border>
 
         <!-- ==================== MAIN MIXER WORKSPACE (RESPONSIVE FULL-SCREEN EXPANSION) ==================== -->
-        <Grid Grid.Row="1" Margin="14,12,14,10" ClipToBounds="True">
+        <Border Grid.Row="1"
+                IsVisible="{Binding IsUpdateAvailable}"
+                Background="{DynamicResource TokenAccentSubtle}"
+                BorderBrush="{DynamicResource TokenAccent}"
+                BorderThickness="0,0,0,1"
+                Padding="18,8">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBlock Text="{Binding UpdateNotificationText}"
+                           FontSize="11"
+                           FontWeight="Medium"
+                           Foreground="{DynamicResource TokenText}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,10,0"
+                           TextWrapping="Wrap" />
+                <Button Grid.Column="1"
+                        Classes="accent-btn"
+                        Content="VIEW RELEASE"
+                        Command="{Binding OpenLatestReleaseCommand}"
+                        Margin="0,0,8,0"
+                        VerticalAlignment="Center" />
+                <Button Grid.Column="2"
+                        Classes="sonar-btn"
+                        Content="DISMISS"
+                        Command="{Binding DismissUpdateNotificationCommand}"
+                        VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="14,12,14,10" ClipToBounds="True">
             <Grid ColumnDefinitions="200,*,195,200">
 
                 <!-- 1. MASTER CHANNEL STRIP (Pinned Left with Playback Hardware Selector Underneath) -->
@@ -2120,7 +2148,7 @@
         </Grid>
 
         <!-- ==================== BOTTOM STATUS BAR ==================== -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Background="{DynamicResource TokenSurface}"
                 BorderBrush="{DynamicResource TokenBorder}"
                 BorderThickness="0,1,0,0"

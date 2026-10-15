@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -16,6 +17,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly ConfigService _configService = new();
     private readonly EqualizerApoService _apoService = new();
     private readonly RealtimeEqAudioEngine _dspEngine = new();
+    private readonly UpdateCheckService _updateCheckService = new();
+    private readonly CancellationTokenSource _updateCheckCts = new();
     private readonly DispatcherTimer _meterTimer;
     private readonly Dictionary<string, AppSessionViewModel> _allSessionsByKey = new(StringComparer.OrdinalIgnoreCase);
     private MixerConfig _config;
@@ -114,6 +117,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string _statusMessage = "SONAR CORE ENGINE ACTIVE";
+
+    [ObservableProperty]
+    private bool _isUpdateAvailable;
+
+    [ObservableProperty]
+    private string _updateNotificationText = string.Empty;
 
     [ObservableProperty]
     private StatusLevel _engineStatusLevel = StatusLevel.Ok;
@@ -295,6 +304,51 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void ExitApplication()
     {
         RequestExitApplication?.Invoke();
+    }
+
+    public async Task CheckForUpdatesAsync()
+    {
+        try
+        {
+            var availableVersion = await _updateCheckService.GetAvailableVersionAsync(_updateCheckCts.Token);
+            if (availableVersion == null || _updateCheckCts.IsCancellationRequested)
+                return;
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                UpdateNotificationText = $"UPDATE AVAILABLE - VERSION {availableVersion} IS READY";
+                IsUpdateAvailable = true;
+            });
+        }
+        catch (OperationCanceledException) when (_updateCheckCts.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            // Update checks are best-effort and should not interfere with startup.
+        }
+    }
+
+    [RelayCommand]
+    private void OpenLatestRelease()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("https://github.com/agasking1337/TomatoMix/releases/latest")
+            {
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            StatusMessage = "COULD NOT OPEN THE RELEASE PAGE";
+        }
+    }
+
+    [RelayCommand]
+    private void DismissUpdateNotification()
+    {
+        IsUpdateAvailable = false;
     }
 
     partial void OnIsDarkThemeChanged(bool value)
@@ -1441,6 +1495,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _updateCheckCts.Cancel();
+        _updateCheckCts.Dispose();
         _meterTimer.Stop();
         FlushPersist();
         _dspEngine.Dispose();
