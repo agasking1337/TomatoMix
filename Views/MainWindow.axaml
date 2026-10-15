@@ -23,6 +23,14 @@
             <Setter Property="MinHeight" Value="60" />
         </Style>
 
+        <!-- Individual Channel Fader: fixed max height in normal window, scales up on full screen -->
+        <Style Selector="Grid.channel-fader-grid">
+            <Setter Property="MaxHeight" Value="185" />
+        </Style>
+        <Style Selector="Window[WindowState=Maximized] Grid.channel-fader-grid, Window[WindowState=FullScreen] Grid.channel-fader-grid">
+            <Setter Property="MaxHeight" Value="Infinity" />
+        </Style>
+
         <!-- Clean Rectangular Studio Fader Cap for Vertical Sliders -->
         <Style Selector="Slider:vertical /template/ Thumb">
             <Setter Property="Width" Value="18" />
@@ -730,20 +738,20 @@
 
                                             <!-- Flexible Vertical Slider + Peak Bar (Shrinks/Expands cleanly on resize) -->
                                             <Grid Grid.Row="1"
+                                                  Classes="channel-fader-grid"
                                                   ColumnDefinitions="*,Auto,Auto,*"
                                                   MinHeight="65"
-                                                  MaxHeight="185"
                                                   VerticalAlignment="Stretch"
                                                   HorizontalAlignment="Center"
                                                   ClipToBounds="True">
 
                                                 <!-- Tick Marks -->
-                                                <Grid Grid.Column="0" RowDefinitions="*,*,*,*,*" Margin="0,4,8,4">
+                                                <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto,*,Auto,*,Auto,*,Auto" Margin="0,4,8,4">
                                                     <TextBlock Grid.Row="0" Text="100" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
-                                                    <TextBlock Grid.Row="1" Text="75" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
-                                                    <TextBlock Grid.Row="2" Text="50" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
-                                                    <TextBlock Grid.Row="3" Text="25" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
-                                                    <TextBlock Grid.Row="4" Text="0" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                                                    <TextBlock Grid.Row="2" Text="75" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                                                    <TextBlock Grid.Row="4" Text="50" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                                                    <TextBlock Grid.Row="6" Text="25" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                                                    <TextBlock Grid.Row="8" Text="0" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
                                                 </Grid>
 
                                                 <!-- Channel Volume Fader -->
