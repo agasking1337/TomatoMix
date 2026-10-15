@@ -175,7 +175,13 @@ jobs:
 
           while ($true) {
             $existingRef = git ls-remote --exit-code --tags origin "refs/tags/$tag" 2>$null
-            $tagExists = $LASTEXITCODE -eq 0
+            $gitExitCode = $LASTEXITCODE
+            if ($gitExitCode -ne 0 -and $gitExitCode -ne 2) {
+              throw "Could not query remote tags (git ls-remote exited with code $gitExitCode)"
+            }
+
+            $tagExists = $gitExitCode -eq 0
+            $LASTEXITCODE = 0
             if (-not $tagExists) { break }
 
             $buildNumber++
@@ -228,7 +234,10 @@ jobs:
           }
 
           $previousTag = git describe --tags --abbrev=0 2>$null
-          if ($LASTEXITCODE -ne 0) { $previousTag = "" }
+          if ($LASTEXITCODE -ne 0) {
+            $previousTag = ""
+            $LASTEXITCODE = 0
+          }
           if (-not [string]::IsNullOrWhiteSpace($previousTag)) {
             $compareUrl = "https://github.com/${{ github.repository }}/compare/$($previousTag.Trim())...$newTag"
             $notes += "`n`n**Full Changelog**: $compareUrl"
