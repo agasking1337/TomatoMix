@@ -1,0 +1,256 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="using:TomatoMix.Theme"
+             x:Class="TomatoMix.Views.SettingsModalView">
+
+    <Border IsVisible="{Binding IsSettingsPageOpen}"
+            Background="{DynamicResource TokenBackdrop}"
+            CornerRadius="10">
+        <Border MaxWidth="760"
+                MaxHeight="690"
+                Margin="20"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Stretch"
+                Background="{DynamicResource TokenSurface}"
+                BorderBrush="{DynamicResource TokenBorderStrong}"
+                BorderThickness="1"
+                CornerRadius="12"
+                ClipToBounds="True">
+            <Grid RowDefinitions="Auto,*">
+                <Border Grid.Row="0"
+                        Background="{DynamicResource TokenSurfaceRaised}"
+                        BorderBrush="{DynamicResource TokenBorder}"
+                        BorderThickness="0,0,0,1"
+                        Padding="18,12">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Border Width="6" Height="26" CornerRadius="3" Background="{DynamicResource TokenAccent}" />
+                            <TextBlock Text="Settings"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TokenText}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Classes="sonar-btn"
+                                Command="{Binding CloseSettingsPageCommand}"
+                                Width="30"
+                                Height="30"
+                                Padding="0"
+                                CornerRadius="15"
+                                ToolTip.Tip="Close settings">
+                            <theme:ThemeIcon Icon="Close" Width="12" Height="12" Foreground="{DynamicResource TokenTextMuted}" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="12" Margin="18">
+                        <Border Background="{DynamicResource TokenSurfaceRaised}"
+                                BorderBrush="{DynamicResource TokenBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="14">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="PREFERENCES"
+                                           FontSize="10"
+                                           FontWeight="Medium"
+                                           LetterSpacing="0.6"
+                                           Foreground="{DynamicResource TokenTextMuted}" />
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <theme:ThemeIcon Icon="{Binding ThemeToggleIcon}" Width="14" Height="14" Foreground="{DynamicResource TokenText}" />
+                                        <TextBlock Text="Appearance" FontSize="12" Foreground="{DynamicResource TokenText}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <Button Grid.Row="0" Grid.Column="1"
+                                            Classes="sonar-btn"
+                                            Command="{Binding ToggleThemeCommand}"
+                                            Height="30"
+                                            Padding="12,0">
+                                        <TextBlock Text="{Binding ThemeToggleLabel}" FontSize="10" VerticalAlignment="Center" />
+                                    </Button>
+                                    <TextBlock Grid.Row="1" Grid.Column="0"
+                                               Text="Refresh available audio devices and active sessions"
+                                               FontSize="10"
+                                               Foreground="{DynamicResource TokenTextMuted}"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Row="1" Grid.Column="1"
+                                            Classes="sonar-btn"
+                                            Command="{Binding RefreshDevicesAndSessionsCommand}"
+                                            Height="30"
+                                            Padding="12,0">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <theme:ThemeIcon Icon="Refresh" Width="12" Height="12" />
+                                            <TextBlock Text="RESCAN" FontSize="10" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{DynamicResource TokenSurfaceRaised}"
+                                BorderBrush="{DynamicResource TokenBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="14">
+                            <StackPanel Spacing="10">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="CHATMIX"
+                                               FontSize="10"
+                                               FontWeight="Medium"
+                                               LetterSpacing="0.6"
+                                               Foreground="{DynamicResource TokenTextMuted}" />
+                                    <TextBlock Text="Choose which channel the ChatMix fader balances against Chat"
+                                               FontSize="10"
+                                               Foreground="{DynamicResource TokenTextMuted}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Grid ColumnDefinitions="*,8,*">
+                                    <Button Grid.Column="0"
+                                            Classes.accent-btn="{Binding IsChatMixGameTarget}"
+                                            Classes.sonar-btn="{Binding IsChatMixMediaTarget}"
+                                            Command="{Binding SetChatMixTargetChannelCommand}"
+                                            CommandParameter="game"
+                                            HorizontalAlignment="Stretch"
+                                            Height="30"
+                                            Padding="10,0"
+                                            ToolTip.Tip="Balance ChatMix between Chat and Game channels">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <theme:ThemeIcon Icon="Dashboard" Width="12" Height="12" VerticalAlignment="Center" />
+                                            <TextBlock Text="CHAT + GAME" FontSize="10" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="2"
+                                            Classes.accent-btn="{Binding IsChatMixMediaTarget}"
+                                            Classes.sonar-btn="{Binding IsChatMixGameTarget}"
+                                            Command="{Binding SetChatMixTargetChannelCommand}"
+                                            CommandParameter="media"
+                                            HorizontalAlignment="Stretch"
+                                            Height="30"
+                                            Padding="10,0"
+                                            ToolTip.Tip="Balance ChatMix between Chat and Media channels">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <theme:ThemeIcon Icon="Play" Width="12" Height="12" VerticalAlignment="Center" />
+                                            <TextBlock Text="CHAT + MEDIA" FontSize="10" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{DynamicResource TokenSurfaceRaised}"
+                                BorderBrush="{DynamicResource TokenBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="14">
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                <StackPanel Grid.Row="0" Grid.Column="0" Spacing="3">
+                                    <TextBlock Text="EQUALIZER APO"
+                                               FontSize="10"
+                                               FontWeight="Medium"
+                                               LetterSpacing="0.6"
+                                               Foreground="{DynamicResource TokenTextMuted}" />
+                                    <TextBlock Text="{Binding ApoStatusText}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TokenText}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Ellipse Grid.Row="0" Grid.Column="1"
+                                         Width="8"
+                                         Height="8"
+                                         Fill="{Binding ApoStatusBrush}"
+                                         VerticalAlignment="Center"
+                                         Margin="12,0,0,0" />
+                                <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                        Classes="sonar-btn"
+                                        Command="{Binding OpenOrInstallEqualizerApoCommand}"
+                                        HorizontalAlignment="Left"
+                                        Height="30"
+                                        Padding="12,0"
+                                        Margin="0,10,0,0"
+                                        ToolTip.Tip="{Binding ApoStatusText}">
+                                    <TextBlock Text="OPEN APO CONFIGURATOR" FontSize="10" VerticalAlignment="Center" />
+                                </Button>
+                            </Grid>
+                        </Border>
+
+                        <Border Background="{DynamicResource TokenSurfaceRaised}"
+                                BorderBrush="{DynamicResource TokenBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="BACKGROUND &amp; STARTUP"
+                                           FontSize="10"
+                                           FontWeight="Medium"
+                                           LetterSpacing="0.6"
+                                           Foreground="{DynamicResource TokenTextMuted}" />
+                                <ToggleButton Classes="accent-toggle"
+                                              IsChecked="{Binding CloseToTray}"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Left"
+                                              Height="30"
+                                              Padding="10,0"
+                                              ToolTip.Tip="Keep TomatoMix running in the Windows System Tray when closing the window">
+                                    <TextBlock Text="CLOSE TO SYSTEM TRAY" FontSize="10" VerticalAlignment="Center" />
+                                </ToggleButton>
+                                <ToggleButton Classes="accent-toggle"
+                                              IsChecked="{Binding MinimizeToTray}"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Left"
+                                              Height="30"
+                                              Padding="10,0"
+                                              ToolTip.Tip="Hide taskbar entry to System Tray when minimizing the window">
+                                    <TextBlock Text="MINIMIZE TO SYSTEM TRAY" FontSize="10" VerticalAlignment="Center" />
+                                </ToggleButton>
+                                <ToggleButton Classes="accent-toggle"
+                                              IsChecked="{Binding RunAtWindowsStartup}"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Left"
+                                              Height="30"
+                                              Padding="10,0"
+                                              ToolTip.Tip="Automatically start TomatoMix when logging into Windows">
+                                    <TextBlock Text="START WITH WINDOWS" FontSize="10" VerticalAlignment="Center" />
+                                </ToggleButton>
+                                <ToggleButton Classes="accent-toggle"
+                                              IsChecked="{Binding StartMinimizedToTray}"
+                                              HorizontalAlignment="Stretch"
+                                              HorizontalContentAlignment="Left"
+                                              Height="30"
+                                              Padding="10,0"
+                                              ToolTip.Tip="Launch directly into the background System Tray on startup">
+                                    <TextBlock Text="START MINIMIZED IN TRAY" FontSize="10" VerticalAlignment="Center" />
+                                </ToggleButton>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Button Grid.Column="0"
+                                    Classes="accent-btn"
+                                    Command="{Binding OpenAddChannelPopupCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    Height="34">
+                                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                                    <theme:ThemeIcon Icon="Plus" Width="13" Height="13" Foreground="{DynamicResource TokenAccentFg}" />
+                                    <TextBlock Text="ADD CHANNEL" FontSize="10" FontWeight="Medium" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Grid.Column="1"
+                                    Classes="sonar-btn"
+                                    Command="{Binding ExitApplicationCommand}"
+                                    Height="34"
+                                    Padding="12,0"
+                                    Margin="8,0,0,0">
+                                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                                    <theme:ThemeIcon Icon="Close" Width="12" Height="12" Foreground="{DynamicResource TokenStatusCritical}" />
+                                    <TextBlock Text="QUIT" FontSize="10" Foreground="{DynamicResource TokenStatusCritical}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Border>
+
+</UserControl>

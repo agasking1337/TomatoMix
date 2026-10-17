@@ -31,6 +31,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _lastAnySolo;
     private int _tickCount;
     private int _pollInFlight;
+    private DateTime _lastMasterUserChangeUtc = DateTime.MinValue;
+    private DateTime _lastMicUserChangeUtc = DateTime.MinValue;
 
     private static readonly string[] CustomChannelIcons =
     [
@@ -104,7 +106,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private string _newChannelIconKey = "settings";
 
     [ObservableProperty]
-    private double _chatMixBalance; // -100 (Full Game) .. 0 (Center) .. +100 (Full Chat)
+    private double _chatMixBalance; // -100 (Full Game/Media) .. 0 (Center) .. +100 (Full Chat)
+
+    [ObservableProperty]
+    private string _chatMixTargetChannelId = "game";
 
     [ObservableProperty]
     private double _gameChannelPeakLevel;
@@ -180,13 +185,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public string AuditionButtonText => IsAuditioningEq ? "STOP TEST LOOP" : "AUDITION EQ";
 
     public string MasterVolumePercentText => IsMasterMuted ? "MUTED" : $"{Math.Round(MasterVolumePercent):0}%";
+    public bool IsChatMixMediaTarget => string.Equals(ChatMixTargetChannelId, "media", StringComparison.OrdinalIgnoreCase);
+    public bool IsChatMixGameTarget => !IsChatMixMediaTarget;
+    public string ChatMixTargetChannelLabel => IsChatMixMediaTarget ? "MEDIA" : "GAME";
+    public string ChatMixTargetGainLabel => $"{ChatMixTargetChannelLabel} GAIN";
+    public string ChatMixTargetPeakTooltip => IsChatMixMediaTarget ? "Live Media Channel Level" : "Live Game Channel Level";
+    public string ChatMixTargetPresetTooltip => IsChatMixMediaTarget ? "Bias toward Media (+50%)" : "Bias toward Game (+50%)";
+    public IconName ChatMixTargetIcon => IsChatMixMediaTarget ? IconName.Play : IconName.Dashboard;
+    public string ChatMixModeBadgeText => $"CHAT + {ChatMixTargetChannelLabel}";
     public string ChatMixLabelText
     {
         get
         {
             if (Math.Abs(ChatMixBalance) < 3) return "BALANCED";
             return ChatMixBalance < 0
-                ? $"GAME +{Math.Round(Math.Abs(ChatMixBalance)):0}%"
+                ? $"{ChatMixTargetChannelLabel} +{Math.Round(Math.Abs(ChatMixBalance)):0}%"
                 : $"CHAT +{Math.Round(ChatMixBalance):0}%";
         }
     }
@@ -210,6 +223,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _minimizeToTray = _config.MinimizeToTray;
         _startMinimizedToTray = _config.StartMinimizedToTray;
         _runAtWindowsStartup = _config.RunAtWindowsStartup;
+        _chatMixTargetChannelId = string.Equals(_config.ChatMixTargetChannelId, "media", StringComparison.OrdinalIgnoreCase)
+            ? "media"
+            : "game";
         ThemeTokens.SetTheme(_isDarkTheme);
 
         InitializeEqBands();
@@ -538,6 +554,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (_suppressMicUpdate) return;
 
+        _lastMicUserChangeUtc = DateTime.UtcNow;
         _audioService.SetMicVolume((float)(mic.VolumePercent / 100.0), mic.IsMuted);
         _config.MicVolume = mic.VolumePercent / 100.0;
         _config.MicMuted = mic.IsMuted;
@@ -625,6 +642,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(MasterVolumePercentText));
         if (_suppressMasterUpdate) return;
 
+        _lastMasterUserChangeUtc = DateTime.UtcNow;
         _audioService.SetMasterVolume((float)(value / 100.0), IsMasterMuted);
         _config.MasterVolume = value / 100.0;
         SchedulePersist();
@@ -637,6 +655,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         TrayStateChanged?.Invoke();
         if (_suppressMasterUpdate) return;
 
+        _lastMasterUserChangeUtc = DateTime.UtcNow;
         _audioService.SetMasterVolume((float)(MasterVolumePercent / 100.0), value);
         _config.MasterMuted = value;
         SchedulePersist();
@@ -658,12 +677,45 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         bool anySolo = Channels.Any(c => c.IsSolo);
         foreach (var ch in Channels)
         {
-            if (ch.Id.Equals("game", StringComparison.OrdinalIgnoreCase)
+            if (ch.Id.Equals(ChatMixTargetChannelId, StringComparison.OrdinalIgnoreCase)
                 || ch.Id.Equals("chat", StringComparison.OrdinalIgnoreCase))
             {
                 ApplyChannelVolumesToAudioEngine(ch, anySolo);
             }
         }
+    }
+
+    partial void OnChatMixTargetChannelIdChanged(string value)
+    {
+        string normalized = string.Equals(value, "media", StringComparison.OrdinalIgnoreCase) ? "media" : "game";
+        _config.ChatMixTargetChannelId = normalized;
+        SchedulePersist();
+
+        OnPropertyChanged(nameof(IsChatMixMediaTarget));
+        OnPropertyChanged(nameof(IsChatMixGameTarget));
+        OnPropertyChanged(nameof(ChatMixTargetChannelLabel));
+        OnPropertyChanged(nameof(ChatMixTargetGainLabel));
+        OnPropertyChanged(nameof(ChatMixTargetPeakTooltip));
+        OnPropertyChanged(nameof(ChatMixTargetPresetTooltip));
+        OnPropertyChanged(nameof(ChatMixTargetIcon));
+        OnPropertyChanged(nameof(ChatMixModeBadgeText));
+        OnPropertyChanged(nameof(ChatMixLabelText));
+
+        var targetCh = Channels.FirstOrDefault(c => c.Id.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        GameChannelPeakLevel = targetCh?.PeakLevel ?? 0.0;
+
+        bool anySolo = Channels.Any(c => c.IsSolo);
+        foreach (var ch in Channels)
+        {
+            if (ch.Id.Equals("game", StringComparison.OrdinalIgnoreCase)
+                || ch.Id.Equals("media", StringComparison.OrdinalIgnoreCase)
+                || ch.Id.Equals("chat", StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyChannelVolumesToAudioEngine(ch, anySolo);
+            }
+        }
+
+        StatusMessage = $"CHATMIX PAIR: CHAT + {ChatMixTargetChannelLabel}";
     }
 
     // ==================== PER-CHANNEL EQ STUDIO & PROFILE SAVER METHODS ====================
@@ -1023,6 +1075,25 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private void SetChatMixTargetChannel(string? channelId)
+    {
+        string target = string.Equals(channelId, "media", StringComparison.OrdinalIgnoreCase) ? "media" : "game";
+        if (string.Equals(ChatMixTargetChannelId, target, StringComparison.OrdinalIgnoreCase))
+        {
+            OnPropertyChanged(nameof(IsChatMixGameTarget));
+            OnPropertyChanged(nameof(IsChatMixMediaTarget));
+            return;
+        }
+        ChatMixTargetChannelId = target;
+    }
+
+    [RelayCommand]
+    private void ToggleChatMixTargetChannel()
+    {
+        ChatMixTargetChannelId = IsChatMixMediaTarget ? "game" : "media";
+    }
+
+    [RelayCommand]
     private void ToggleMasterMute()
     {
         IsMasterMuted = !IsMasterMuted;
@@ -1223,7 +1294,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             MasterPeakLevel = Math.Clamp(mPeak * 100.0, 0.0, 100.0);
         }
 
-        if (Math.Abs(MasterVolumePercent - mVol * 100.0) > 1.0 || IsMasterMuted != mMuted)
+        if ((DateTime.UtcNow - _lastMasterUserChangeUtc).TotalMilliseconds >= 400
+            && (Math.Abs(MasterVolumePercent - mVol * 100.0) > 1.0 || IsMasterMuted != mMuted))
         {
             _suppressMasterUpdate = true;
             MasterVolumePercent = Math.Clamp(mVol * 100.0, 0.0, 100.0);
@@ -1240,7 +1312,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 : Math.Max(0.0, MicChannel.PeakLevel * 0.78);
         }
 
-        if (Math.Abs(MicChannel.VolumePercent - micVol * 100.0) > 1.0 || MicChannel.IsMuted != micMuted)
+        if ((DateTime.UtcNow - _lastMicUserChangeUtc).TotalMilliseconds >= 400
+            && (Math.Abs(MicChannel.VolumePercent - micVol * 100.0) > 1.0 || MicChannel.IsMuted != micMuted))
         {
             _suppressMicUpdate = true;
             MicChannel.VolumePercent = Math.Clamp(micVol * 100.0, 0.0, 100.0);
@@ -1355,9 +1428,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 }
             }
 
-            var gameCh = Channels.FirstOrDefault(c => c.Id.Equals("game", StringComparison.OrdinalIgnoreCase));
+            var targetCh = Channels.FirstOrDefault(c => c.Id.Equals(ChatMixTargetChannelId, StringComparison.OrdinalIgnoreCase));
             var chatCh = Channels.FirstOrDefault(c => c.Id.Equals("chat", StringComparison.OrdinalIgnoreCase));
-            GameChannelPeakLevel = gameCh?.PeakLevel ?? 0.0;
+            GameChannelPeakLevel = targetCh?.PeakLevel ?? 0.0;
             ChatChannelPeakLevel = chatCh?.PeakLevel ?? 0.0;
         }
 
@@ -1463,7 +1536,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         bool effectiveMute = channelMuted || app.IsMuted;
 
         double chatMixMultiplier = 1.0;
-        if (channel.Id.Equals("game", StringComparison.OrdinalIgnoreCase) && ChatMixBalance > 0)
+        if (channel.Id.Equals(ChatMixTargetChannelId, StringComparison.OrdinalIgnoreCase) && ChatMixBalance > 0)
         {
             chatMixMultiplier = Math.Clamp(1.0 - (ChatMixBalance / 100.0), 0.0, 1.0);
         }

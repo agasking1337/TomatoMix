@@ -1,0 +1,532 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TomatoMix.ViewModels"
+             xmlns:theme="using:TomatoMix.Theme"
+             x:Class="TomatoMix.Views.ChannelsGridView">
+
+    <ItemsControl ItemsSource="{Binding Channels}"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch"
+                  ClipToBounds="True">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <UniformGrid Rows="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+
+        <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="vm:ChannelViewModel">
+                <Border Classes="channel-strip"
+                        Margin="5,0"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        DragDrop.AllowDrop="True">
+                    <Grid RowDefinitions="Auto,1.15*,*" ClipToBounds="True">
+
+                        <!-- A. CHANNEL HEADER BAR -->
+                        <StackPanel Grid.Row="0">
+                            <Border Padding="12,10"
+                                    BorderBrush="{DynamicResource TokenBorder}"
+                                    BorderThickness="0,0,0,1">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <!-- Channel Typed Icon + Status Dot + Name / Rename TextBox -->
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center" ClipToBounds="True">
+                                        <Border Width="24"
+                                                Height="24"
+                                                CornerRadius="6"
+                                                Background="{DynamicResource TokenSurfaceInset}">
+                                            <theme:ThemeIcon Icon="{Binding ChannelIcon}"
+                                                             Width="13"
+                                                             Height="13"
+                                                             Foreground="{DynamicResource TokenText}"
+                                                             HorizontalAlignment="Center"
+                                                             VerticalAlignment="Center" />
+                                        </Border>
+
+                                        <Ellipse Width="6"
+                                                 Height="6"
+                                                 Fill="{Binding StatusBrush}"
+                                                 VerticalAlignment="Center" />
+
+                                        <TextBlock Text="{Binding Name}"
+                                                   IsVisible="{Binding !IsEditingName}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   LetterSpacing="0.8"
+                                                   Foreground="{DynamicResource TokenText}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+
+                                        <TextBox Text="{Binding Name}"
+                                                 IsVisible="{Binding IsEditingName}"
+                                                 MinWidth="70"
+                                                 FontSize="12"
+                                                 FontWeight="Normal"
+                                                 Padding="6,2"
+                                                 Background="{DynamicResource TokenSurfaceInset}"
+                                                 BorderBrush="{DynamicResource TokenBorderStrong}"
+                                                 Foreground="{DynamicResource TokenText}"
+                                                 VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <!-- Rename / Delete Controls -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                        <Button Classes="sonar-btn"
+                                                Command="{Binding ToggleEditNameCommand}"
+                                                ToolTip.Tip="Rename Channel"
+                                                Width="24"
+                                                Height="24"
+                                                Padding="0">
+                                            <theme:ThemeIcon Icon="Edit"
+                                                             Width="11"
+                                                             Height="11"
+                                                             Foreground="{DynamicResource TokenTextMuted}"
+                                                             HorizontalAlignment="Center"
+                                                             VerticalAlignment="Center" />
+                                        </Button>
+                                        <Button Classes="sonar-btn"
+                                                IsVisible="{Binding CanDelete}"
+                                                Command="{Binding DeleteChannelCommand}"
+                                                ToolTip.Tip="Delete Custom Channel"
+                                                Width="24"
+                                                Height="24"
+                                                Padding="0">
+                                            <theme:ThemeIcon Icon="Trash"
+                                                             Width="11"
+                                                             Height="11"
+                                                             Foreground="{DynamicResource TokenStatusCritical}"
+                                                             HorizontalAlignment="Center"
+                                                             VerticalAlignment="Center" />
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- B. RESPONSIVE VERTICAL FADER + LIVE PEAK METER + MUTE/SOLO + MINI EQ -->
+                        <Border Grid.Row="1"
+                                Background="Transparent"
+                                Padding="12,8"
+                                BorderBrush="{DynamicResource TokenBorder}"
+                                BorderThickness="0,0,0,1"
+                                ClipToBounds="True">
+                            <Grid RowDefinitions="Auto,*,Auto,Auto" ClipToBounds="True">
+
+                                <!-- Volume Readout Pill -->
+                                <Border Grid.Row="0"
+                                        Background="{DynamicResource TokenSurfaceInset}"
+                                        BorderBrush="{DynamicResource TokenBorder}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="8,3"
+                                        HorizontalAlignment="Center"
+                                        MinWidth="72"
+                                        Margin="0,0,0,6">
+                                    <TextBlock Text="{Binding VolumePercentText}"
+                                               FontSize="13"
+                                               FontWeight="Medium"
+                                               Foreground="{DynamicResource TokenText}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Border>
+
+                                <!-- Flexible Vertical Slider + Peak Bar (Shrinks/Expands cleanly on resize) -->
+                                <Grid Grid.Row="1"
+                                      Background="Transparent"
+                                      Classes="channel-fader-grid"
+                                      ColumnDefinitions="*,Auto,Auto,*"
+                                      MinHeight="65"
+                                      VerticalAlignment="Stretch"
+                                      HorizontalAlignment="Center"
+                                      ClipToBounds="True">
+
+                                    <!-- Tick Marks -->
+                                    <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto,*,Auto,*,Auto,*,Auto" Margin="0,4,8,4">
+                                        <TextBlock Grid.Row="0" Text="100" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                                        <TextBlock Grid.Row="2" Text="75" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                                        <TextBlock Grid.Row="4" Text="50" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                                        <TextBlock Grid.Row="6" Text="25" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                                        <TextBlock Grid.Row="8" Text="0" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                                    </Grid>
+
+                                    <!-- Channel Volume Fader -->
+                                    <Slider Grid.Column="1"
+                                            Orientation="Vertical"
+                                            Minimum="0"
+                                            Maximum="100"
+                                            Value="{Binding VolumePercent}"
+                                            VerticalAlignment="Stretch"
+                                            Foreground="{DynamicResource TokenAccent}"
+                                            HorizontalAlignment="Center" />
+
+                                    <!-- Responsive Live Channel VU Meter -->
+                                    <ProgressBar Grid.Column="2"
+                                                 Orientation="Vertical"
+                                                 Minimum="0"
+                                                 Maximum="100"
+                                                 Value="{Binding PeakLevel}"
+                                                 Width="10"
+                                                 MinWidth="10"
+                                                 MinHeight="40"
+                                                 Margin="10,4,0,4"
+                                                 CornerRadius="5"
+                                                 Background="{DynamicResource TokenSurfaceInset}"
+                                                 BorderBrush="{DynamicResource TokenBorder}"
+                                                 BorderThickness="1"
+                                                 Foreground="{DynamicResource TokenAccent}"
+                                                 VerticalAlignment="Stretch" />
+                                </Grid>
+
+                                <!-- MUTE & SOLO Buttons -->
+                                <Grid Grid.Row="2" ColumnDefinitions="*,6,*" Margin="0,6,0,0">
+                                    <ToggleButton Grid.Column="0"
+                                                  Classes="mute-toggle"
+                                                  IsChecked="{Binding IsMuted}"
+                                                  HorizontalAlignment="Stretch"
+                                                  Height="28"
+                                                  Padding="4,0">
+                                        <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <theme:ThemeIcon Icon="Close" Width="10" Height="10" VerticalAlignment="Center" />
+                                            <TextBlock Text="MUTE" FontSize="10" FontWeight="Normal" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </ToggleButton>
+
+                                    <ToggleButton Grid.Column="2"
+                                                  Classes="solo-toggle"
+                                                  IsChecked="{Binding IsSolo}"
+                                                  HorizontalAlignment="Stretch"
+                                                  Height="28"
+                                                  Padding="4,0">
+                                        <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <theme:ThemeIcon Icon="Star" Width="10" Height="10" VerticalAlignment="Center" />
+                                            <TextBlock Text="SOLO" FontSize="10" FontWeight="Normal" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </ToggleButton>
+                                </Grid>
+
+                                <!-- PER-CHANNEL MINI EQ PREVIEW & STUDIO BUTTON -->
+                                <Border Grid.Row="3"
+                                        Margin="0,6,0,0"
+                                        Background="{DynamicResource TokenSurfaceInset}"
+                                        BorderBrush="{DynamicResource TokenBorder}"
+                                        BorderThickness="1"
+                                        CornerRadius="7"
+                                        Padding="7,5"
+                                        ClipToBounds="True">
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                            <ToggleButton Grid.Column="0"
+                                                          Classes="accent-toggle"
+                                                          IsChecked="{Binding IsEqEnabled}"
+                                                          Width="30"
+                                                          Height="20"
+                                                          Padding="0"
+                                                          CornerRadius="4"
+                                                          FontSize="9"
+                                                          FontWeight="Medium"
+                                                          Content="EQ"
+                                                          VerticalAlignment="Center"
+                                                          ToolTip.Tip="Enable / Bypass Channel Equalizer" />
+
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding EqStatusBadgeText}"
+                                                       FontSize="9"
+                                                       FontWeight="Normal"
+                                                       Foreground="{DynamicResource TokenTextMuted}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Margin="6,0"
+                                                       VerticalAlignment="Center"
+                                                       ToolTip.Tip="{Binding ActiveEqProfileName}" />
+
+                                            <Button Grid.Column="2"
+                                                    Classes="sonar-btn"
+                                                    Command="{Binding OpenEqEditorCommand}"
+                                                    Height="20"
+                                                    Padding="6,0"
+                                                    VerticalAlignment="Center"
+                                                    ToolTip.Tip="Open 10-Band EQ &amp; Profile Saver">
+                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                    <theme:ThemeIcon Icon="Tunnel" Width="10" Height="10" Foreground="{DynamicResource TokenText}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="EQ" FontSize="9" FontWeight="Medium" Foreground="{DynamicResource TokenText}" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
+                                        </Grid>
+
+                                        <!-- Mini Live Frequency Response Curve -->
+                                        <Button Command="{Binding OpenEqEditorCommand}"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Padding="0"
+                                                Cursor="Hand"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch">
+                                            <Viewbox Stretch="Fill" Height="28">
+                                                <Canvas Width="220" Height="36" ClipToBounds="True">
+                                                    <Line StartPoint="0,18" EndPoint="220,18" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+                                                    <Polygon Points="{Binding MiniEqFillPoints}"
+                                                             Fill="{DynamicResource TokenAccentSubtle}" />
+                                                    <Polyline Points="{Binding MiniEqCurvePoints}"
+                                                              Stroke="{DynamicResource TokenAccent}"
+                                                              StrokeThickness="1.8" />
+                                                </Canvas>
+                                            </Viewbox>
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+
+                            </Grid>
+                        </Border>
+
+                        <!-- C. ROUTED APPLICATIONS SECTION -->
+                        <Grid Grid.Row="2" RowDefinitions="Auto,*" Margin="10,8,10,10" ClipToBounds="True">
+                            <!-- Section Header -->
+                            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="2,0,2,6">
+                                <TextBlock Text="ROUTED APPS"
+                                           FontSize="10"
+                                           FontWeight="Medium"
+                                           LetterSpacing="0.6"
+                                           Foreground="{DynamicResource TokenTextMuted}"
+                                           VerticalAlignment="Center" />
+                                <Border Grid.Column="1"
+                                        Background="{DynamicResource TokenSurfaceInset}"
+                                        BorderBrush="{DynamicResource TokenBorder}"
+                                        BorderThickness="1"
+                                        CornerRadius="10"
+                                        Padding="6,1"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding AppCount}"
+                                               FontSize="10"
+                                               FontWeight="Normal"
+                                               Foreground="{DynamicResource TokenText}"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                            </Grid>
+
+                            <!-- Scrollable App Cards List + Empty Drop Zone -->
+                            <Grid Grid.Row="1" ClipToBounds="True">
+                                <!-- Empty Drop Placeholder -->
+                                <Border IsVisible="{Binding HasNoApps}"
+                                        BorderBrush="{DynamicResource TokenBorder}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Background="{DynamicResource TokenSurfaceInset}"
+                                        Padding="10"
+                                        ClipToBounds="True">
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="4">
+                                        <theme:ThemeIcon Icon="Download"
+                                                         Width="16"
+                                                         Height="16"
+                                                         Foreground="{DynamicResource TokenTextFaint}"
+                                                         HorizontalAlignment="Center" />
+                                        <TextBlock Text="DROP APPS HERE"
+                                                   FontSize="10"
+                                                   FontWeight="Medium"
+                                                   LetterSpacing="0.5"
+                                                   Foreground="{DynamicResource TokenTextMuted}"
+                                                   HorizontalAlignment="Center" />
+                                        <TextBlock Text="Drag an app card here to route audio"
+                                                   FontSize="10"
+                                                   FontWeight="Normal"
+                                                   Foreground="{DynamicResource TokenTextFaint}"
+                                                   TextAlignment="Center"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Routed App Cards -->
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding Apps}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="6" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="vm:AppSessionViewModel">
+                                                <Border Classes="app-card"
+                                                        Padding="8,7"
+                                                        PointerPressed="OnAppCardPointerPressed">
+                                                    <StackPanel Spacing="5" ClipToBounds="True">
+
+                                                        <!-- Row 1: Grip + App Icon + Name + Status + Mute + Move Channel Menu -->
+                                                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" VerticalAlignment="Center">
+                                                            <theme:ThemeIcon Grid.Column="0"
+                                                                             Icon="Grip"
+                                                                             Width="10"
+                                                                             Height="10"
+                                                                             Margin="0,0,5,0"
+                                                                             Foreground="{DynamicResource TokenTextFaint}"
+                                                                             VerticalAlignment="Center" />
+
+                                                            <!-- App Icon or Initials -->
+                                                            <Grid Grid.Column="1" Width="22" Height="22" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                                <Border CornerRadius="5"
+                                                                        Background="{DynamicResource TokenSurfaceInset}"
+                                                                        BorderBrush="{DynamicResource TokenBorder}"
+                                                                        BorderThickness="1"
+                                                                        IsVisible="{Binding AppIcon, Converter={x:Static ObjectConverters.IsNull}}">
+                                                                    <TextBlock Text="{Binding Initials}"
+                                                                               FontSize="9"
+                                                                               FontWeight="Medium"
+                                                                               Foreground="{DynamicResource TokenText}"
+                                                                               HorizontalAlignment="Center"
+                                                                               VerticalAlignment="Center" />
+                                                                </Border>
+                                                                <Image Source="{Binding AppIcon}"
+                                                                       Width="20"
+                                                                       Height="20"
+                                                                       VerticalAlignment="Center"
+                                                                       IsVisible="{Binding AppIcon, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                            </Grid>
+
+                                                            <!-- App Display Name -->
+                                                            <TextBlock Grid.Column="2"
+                                                                       Text="{Binding DisplayName}"
+                                                                       FontSize="11"
+                                                                       FontWeight="Normal"
+                                                                       Foreground="{DynamicResource TokenText}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       VerticalAlignment="Center"
+                                                                       ToolTip.Tip="{Binding DisplayName}" />
+
+                                                            <!-- Semantic Session Status Dot -->
+                                                            <Ellipse Grid.Column="3"
+                                                                     Width="6"
+                                                                     Height="6"
+                                                                     Margin="4,0"
+                                                                     Fill="{Binding StatusBrush}"
+                                                                     VerticalAlignment="Center" />
+
+                                                            <!-- App Trim Mute Toggle -->
+                                                            <ToggleButton Grid.Column="4"
+                                                                          Classes="mute-toggle"
+                                                                          IsChecked="{Binding IsMuted}"
+                                                                          Width="24"
+                                                                          Height="22"
+                                                                          Padding="0"
+                                                                          Margin="2,0,3,0"
+                                                                          VerticalAlignment="Center"
+                                                                          ToolTip.Tip="Mute Application">
+                                                                <theme:ThemeIcon Icon="Close" Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </ToggleButton>
+
+                                                            <!-- Route App to Another Channel Button -->
+                                                            <Button Grid.Column="5"
+                                                                    Classes="sonar-btn"
+                                                                    Width="24"
+                                                                    Height="22"
+                                                                    Padding="0"
+                                                                    VerticalAlignment="Center"
+                                                                    Click="OnRouteAppButtonClick"
+                                                                    ToolTip.Tip="Move App to Another Channel">
+                                                                <theme:ThemeIcon Icon="Sftp" Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Button>
+                                                        </Grid>
+
+                                                        <!-- Row 2: Unified Volume Slider + Live Animated EQ Wave Track -->
+                                                        <Border Background="{DynamicResource TokenSurfaceInset}"
+                                                                BorderBrush="{DynamicResource TokenBorder}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="6"
+                                                                Height="26"
+                                                                Padding="6,0"
+                                                                ClipToBounds="True">
+                                                            <Grid ColumnDefinitions="Auto,*,34" VerticalAlignment="Center">
+
+                                                                <!-- Mini 4-Bar Animated EQ Equalizer Indicator -->
+                                                                <StackPanel Grid.Column="0"
+                                                                            Orientation="Horizontal"
+                                                                            Spacing="2"
+                                                                            Height="14"
+                                                                            Margin="0,0,6,0"
+                                                                            VerticalAlignment="Center">
+                                                                    <Border Width="2"
+                                                                            Height="{Binding EqBar1Height}"
+                                                                            CornerRadius="1"
+                                                                            Background="{DynamicResource TokenAccent}"
+                                                                            VerticalAlignment="Bottom" />
+                                                                    <Border Width="2"
+                                                                            Height="{Binding EqBar2Height}"
+                                                                            CornerRadius="1"
+                                                                            Background="{DynamicResource TokenAccent}"
+                                                                            VerticalAlignment="Bottom" />
+                                                                    <Border Width="2"
+                                                                            Height="{Binding EqBar3Height}"
+                                                                            CornerRadius="1"
+                                                                            Background="{DynamicResource TokenAccent}"
+                                                                            VerticalAlignment="Bottom" />
+                                                                    <Border Width="2"
+                                                                            Height="{Binding EqBar4Height}"
+                                                                            CornerRadius="1"
+                                                                            Background="{DynamicResource TokenAccent}"
+                                                                            VerticalAlignment="Bottom" />
+                                                                </StackPanel>
+
+                                                                <!-- Combined Live Audio Waveform Canvas + Interactive Volume Slider -->
+                                                                <Grid Grid.Column="1" Height="22" VerticalAlignment="Center" ClipToBounds="True">
+                                                                    <!-- Subtle Volume Fill Curtain (0% .. RelativeVolume%) -->
+                                                                    <ProgressBar Minimum="0"
+                                                                                 Maximum="100"
+                                                                                 Value="{Binding RelativeVolume}"
+                                                                                 Height="20"
+                                                                                 MinWidth="10"
+                                                                                 CornerRadius="4"
+                                                                                 Background="Transparent"
+                                                                                 Foreground="{DynamicResource TokenAccentSubtle}"
+                                                                                 VerticalAlignment="Center"
+                                                                                 IsHitTestVisible="False" />
+
+                                                                    <!-- Subtle Center Baseline -->
+                                                                    <Border Height="1"
+                                                                            Background="{DynamicResource TokenBorder}"
+                                                                            VerticalAlignment="Center"
+                                                                            IsHitTestVisible="False" />
+
+                                                                    <!-- Live Oscillating EQ Wave Backdrop inside the Slider Track -->
+                                                                    <Viewbox Stretch="Fill" Height="22" VerticalAlignment="Center" IsHitTestVisible="False">
+                                                                        <Canvas Width="180" Height="22" ClipToBounds="True">
+                                                                            <Polygon Points="{Binding WaveFillPoints}"
+                                                                                     Fill="{DynamicResource TokenAccentSubtle}" />
+                                                                            <Polyline Points="{Binding WaveCurvePoints}"
+                                                                                      Stroke="{DynamicResource TokenAccent}"
+                                                                                      StrokeThickness="1.3" />
+                                                                        </Canvas>
+                                                                    </Viewbox>
+
+                                                                    <!-- Interactive App Volume Slider (Sleek Vertical Playhead Pill) -->
+                                                                    <Slider Classes="wave-slider"
+                                                                            Minimum="0"
+                                                                            Maximum="100"
+                                                                            Value="{Binding RelativeVolume}"
+                                                                            Foreground="{DynamicResource TokenAccent}"
+                                                                            VerticalAlignment="Center" />
+                                                                </Grid>
+
+                                                                <!-- Volume Percentage Readout -->
+                                                                <TextBlock Grid.Column="2"
+                                                                           Text="{Binding VolumePercentText}"
+                                                                           FontSize="10"
+                                                                           FontWeight="Normal"
+                                                                           Foreground="{DynamicResource TokenTextMuted}"
+                                                                           HorizontalAlignment="Right"
+                                                                           VerticalAlignment="Center" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Grid>
+                        </Grid>
+
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+</UserControl>

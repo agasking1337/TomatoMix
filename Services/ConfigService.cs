@@ -59,6 +59,10 @@ public class ConfigService
                         cfg.ActiveMicEqProfileName = "FLAT";
                     }
 
+                    cfg.ChatMixTargetChannelId = string.Equals(cfg.ChatMixTargetChannelId, "media", StringComparison.OrdinalIgnoreCase)
+                        ? "media"
+                        : "game";
+
                     // Also load any standalone .eqprofile.json files in EqProfiles folder
                     LoadExternalProfileFiles(cfg);
                     cfg.RunAtWindowsStartup = IsWindowsStartupEnabled();
@@ -306,6 +310,7 @@ public class ConfigService
             IsDarkTheme = true,
             MasterVolume = 1.0,
             MasterMuted = false,
+            ChatMixTargetChannelId = "game",
             MicVolume = 1.0,
             MicMuted = false,
             IsMicEqEnabled = true,

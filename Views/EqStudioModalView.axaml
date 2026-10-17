@@ -1,0 +1,346 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TomatoMix.ViewModels"
+             xmlns:theme="using:TomatoMix.Theme"
+             x:Class="TomatoMix.Views.EqStudioModalView">
+
+    <Border IsVisible="{Binding IsEqEditorOpen}"
+            Background="{DynamicResource TokenBackdrop}"
+            CornerRadius="10">
+        <Border MaxWidth="940"
+                Margin="20"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Stretch"
+                Background="{DynamicResource TokenSurface}"
+                BorderBrush="{DynamicResource TokenBorderStrong}"
+                BorderThickness="1"
+                CornerRadius="12"
+                ClipToBounds="True">
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+
+                <!-- 1. EQ Header Bar -->
+                <Border Grid.Row="0"
+                        Background="{DynamicResource TokenSurfaceRaised}"
+                        BorderBrush="{DynamicResource TokenBorder}"
+                        BorderThickness="0,0,0,1"
+                        Padding="18,12">
+                    <Grid ColumnDefinitions="*,Auto">
+
+                        <!-- Title & Active Channel Badge -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <Border Width="6"
+                                    Height="26"
+                                    CornerRadius="3"
+                                    Background="{DynamicResource TokenAccent}" />
+                            <TextBlock Text="{Binding EqTargetChannel.Name}"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TokenText}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="Equalizer"
+                                       FontSize="14"
+                                       FontWeight="Normal"
+                                       Foreground="{DynamicResource TokenTextMuted}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- Enable Toggle, Live Audition Loop & Close Button -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <ToggleButton Classes="accent-toggle"
+                                          IsChecked="{Binding IsAuditioningEq}"
+                                          Width="30"
+                                          Height="30"
+                                          Padding="0"
+                                          CornerRadius="15"
+                                          ToolTip.Tip="{Binding AuditionButtonText}">
+                                <theme:ThemeIcon Icon="Play" Width="12" Height="12" />
+                            </ToggleButton>
+
+                            <ToggleButton Classes="accent-toggle"
+                                          IsChecked="{Binding EqTargetChannel.IsEqEnabled}"
+                                          Height="28"
+                                          Padding="10,0"
+                                          FontWeight="Normal"
+                                          FontSize="10">
+                                <TextBlock Text="EQ ON" VerticalAlignment="Center" />
+                            </ToggleButton>
+
+                            <Button Classes="sonar-btn"
+                                    Command="{Binding CloseEqEditorCommand}"
+                                    Width="30"
+                                    Height="30"
+                                    Padding="0"
+                                    CornerRadius="15"
+                                    ToolTip.Tip="Close equalizer">
+                                <theme:ThemeIcon Icon="Close" Width="12" Height="12" Foreground="{DynamicResource TokenTextMuted}" />
+                            </Button>
+                        </StackPanel>
+
+                    </Grid>
+                </Border>
+
+                <!-- 2. EQ PROFILE MANAGER & SAVER BAR -->
+                <Border Grid.Row="1"
+                        Background="{DynamicResource TokenSurface}"
+                        BorderBrush="{DynamicResource TokenBorder}"
+                        BorderThickness="0,0,0,1"
+                        Padding="18,10">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+
+                        <!-- Preset / Saved Profile Selector Dropdown -->
+                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="LOAD EQ PROFILE (BUILT-IN &amp; SAVED)"
+                                       FontSize="9"
+                                       FontWeight="Medium"
+                                       Foreground="{DynamicResource TokenTextMuted}"
+                                       LetterSpacing="0.5" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <ComboBox ItemsSource="{Binding AvailableEqProfiles}"
+                                          SelectedItem="{Binding SelectedEqProfile}"
+                                          Width="245"
+                                          Height="30"
+                                          Background="{DynamicResource TokenSurfaceInset}"
+                                          BorderBrush="{DynamicResource TokenBorder}"
+                                          Foreground="{DynamicResource TokenText}"
+                                          FontSize="11"
+                                          CornerRadius="6"
+                                          VerticalAlignment="Center" />
+                                <Button Classes="sonar-btn"
+                                        Command="{Binding ResetActiveChannelEqToFlatCommand}"
+                                        ToolTip.Tip="Reset all 10 bands to 0.0 dB (Flat)"
+                                        Height="30"
+                                        Padding="10,0"
+                                        VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <theme:ThemeIcon Icon="Refresh" Width="11" Height="11" Foreground="{DynamicResource TokenText}" VerticalAlignment="Center" />
+                                        <TextBlock Text="FLAT" FontSize="10" FontWeight="Normal" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Save Custom EQ Profile Input & Buttons -->
+                        <StackPanel Grid.Column="2" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="PROFILE SAVER NAME"
+                                       FontSize="9"
+                                       FontWeight="Medium"
+                                       Foreground="{DynamicResource TokenTextMuted}"
+                                       LetterSpacing="0.5" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <TextBox Text="{Binding CustomEqProfileNameInput}"
+                                         Watermark="Enter profile name..."
+                                         Width="180"
+                                         Height="30"
+                                         Background="{DynamicResource TokenSurfaceInset}"
+                                         BorderBrush="{DynamicResource TokenBorder}"
+                                         Foreground="{DynamicResource TokenText}"
+                                         FontSize="11"
+                                         Padding="10,4"
+                                         CornerRadius="6"
+                                         VerticalAlignment="Center" />
+
+                                <Button Classes="accent-btn"
+                                        Command="{Binding SaveCurrentEqProfileCommand}"
+                                        Height="30"
+                                        Padding="12,0"
+                                        VerticalAlignment="Center"
+                                        ToolTip.Tip="Save current 10-band curve as a reusable profile (.eqprofile.json)">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <theme:ThemeIcon Icon="Check" Width="11" Height="11" Foreground="{DynamicResource TokenAccentFg}" VerticalAlignment="Center" />
+                                        <TextBlock Text="SAVE PROFILE" FontSize="10" FontWeight="Medium" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+
+                                <Button Classes="sonar-btn"
+                                        IsVisible="{Binding CanDeleteSelectedEqProfile}"
+                                        Command="{Binding DeleteSelectedEqProfileCommand}"
+                                        Height="30"
+                                        Padding="10,0"
+                                        VerticalAlignment="Center"
+                                        ToolTip.Tip="Delete selected custom profile">
+                                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                        <theme:ThemeIcon Icon="Trash" Width="11" Height="11" Foreground="{DynamicResource TokenStatusCritical}" VerticalAlignment="Center" />
+                                        <TextBlock Text="DELETE" FontSize="10" FontWeight="Normal" Foreground="{DynamicResource TokenStatusCritical}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+
+                                <Button Classes="sonar-btn"
+                                        Command="{Binding OpenEqProfilesFolderCommand}"
+                                        Height="30"
+                                        Padding="10,0"
+                                        VerticalAlignment="Center"
+                                        ToolTip.Tip="Open saved .eqprofile.json files folder in Windows Explorer">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <theme:ThemeIcon Icon="Folder" Width="11" Height="11" Foreground="{DynamicResource TokenTextMuted}" VerticalAlignment="Center" />
+                                        <TextBlock Text="PROFILES DIR" FontSize="10" FontWeight="Normal" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+
+                    </Grid>
+                </Border>
+
+                <!-- 3. INTERACTIVE FREQUENCY RESPONSE GRAPH -->
+                <Border Grid.Row="2"
+                        Padding="18,12,18,8"
+                        Background="{DynamicResource TokenBg}"
+                        ClipToBounds="True">
+                    <Grid ColumnDefinitions="45,*">
+                        <!-- dB Y-Axis Labels -->
+                        <Grid Grid.Column="0" RowDefinitions="*,*,*,*,*" Height="130" Margin="0,0,8,0">
+                            <TextBlock Grid.Row="0" Text="+12 dB" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextMuted}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Row="1" Text="+6 dB" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Row="2" Text="0 dB" FontSize="9" FontWeight="Medium" Foreground="{DynamicResource TokenText}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="3" Text="-6 dB" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                            <TextBlock Grid.Row="4" Text="-12 dB" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextMuted}" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                        </Grid>
+
+                        <!-- Responsive Graph Canvas -->
+                        <Border Grid.Column="1"
+                                Height="130"
+                                HorizontalAlignment="Stretch"
+                                Background="{DynamicResource TokenSurfaceInset}"
+                                BorderBrush="{DynamicResource TokenBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                ClipToBounds="True">
+                            <Viewbox Stretch="Fill">
+                                <Canvas Width="740" Height="150" ClipToBounds="True">
+                                    <!-- Horizontal dB Grid Lines -->
+                                    <Line StartPoint="0,38" EndPoint="740,38" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+                                    <Line StartPoint="0,75" EndPoint="740,75" Stroke="{DynamicResource TokenBorderStrong}" StrokeThickness="1.5" />
+                                    <Line StartPoint="0,112" EndPoint="740,112" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+
+                                    <!-- Vertical Octave Grid Lines -->
+                                    <Line StartPoint="74,0" EndPoint="74,150" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+                                    <Line StartPoint="156,0" EndPoint="156,150" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+                                    <Line StartPoint="238,0" EndPoint="238,150" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+                                    <Line StartPoint="320,0" EndPoint="320,150" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+                                    <Line StartPoint="402,0" EndPoint="402,150" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+                                    <Line StartPoint="484,0" EndPoint="484,150" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+                                    <Line StartPoint="566,0" EndPoint="566,150" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+                                    <Line StartPoint="648,0" EndPoint="648,150" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+
+                                    <!-- Filled Monochrome Shade Under Biquad Frequency Curve -->
+                                    <Polygon Points="{Binding LargeEqFillPoints}"
+                                             Fill="{DynamicResource TokenAccentSubtle}" />
+
+                                    <!-- Main Biquad Frequency Response Curve -->
+                                    <Polyline Points="{Binding LargeEqCurvePoints}"
+                                              Stroke="{DynamicResource TokenAccent}"
+                                              StrokeThickness="2.6" />
+                                </Canvas>
+                            </Viewbox>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- 4. PREAMP + 10-BAND VERTICAL FADERS -->
+                <Border Grid.Row="3"
+                        Padding="18,10,18,14"
+                        Background="{DynamicResource TokenSurface}"
+                        ClipToBounds="True">
+                    <Grid ColumnDefinitions="Auto,Auto,*">
+
+                        <!-- Preamp Fader Column -->
+                        <Border Grid.Column="0"
+                                Background="{DynamicResource TokenSurfaceRaised}"
+                                BorderBrush="{DynamicResource TokenBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="10,8"
+                                Width="80"
+                                ClipToBounds="True">
+                            <StackPanel Spacing="5" HorizontalAlignment="Center">
+                                <TextBlock Text="PREAMP"
+                                           FontSize="10"
+                                           FontWeight="Medium"
+                                           Foreground="{DynamicResource TokenTextMuted}"
+                                           HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding ActiveEqPreampText}"
+                                           FontSize="10"
+                                           FontWeight="Normal"
+                                           Foreground="{DynamicResource TokenText}"
+                                           HorizontalAlignment="Center" />
+                                <Slider Orientation="Vertical"
+                                        Minimum="-12"
+                                        Maximum="12"
+                                        Value="{Binding ActiveEqPreampDb}"
+                                        Height="125"
+                                        Foreground="{DynamicResource TokenAccent}"
+                                        HorizontalAlignment="Center" />
+                                <TextBlock Text="HEADROOM"
+                                           FontSize="8"
+                                           FontWeight="Normal"
+                                           Foreground="{DynamicResource TokenTextFaint}"
+                                           HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Divider -->
+                        <Border Grid.Column="1"
+                                Width="1"
+                                Background="{DynamicResource TokenBorder}"
+                                Margin="12,6" />
+
+                        <!-- 10 Frequency Band Faders (31Hz .. 16kHz) -->
+                        <ItemsControl Grid.Column="2" ItemsSource="{Binding ActiveEqBands}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="10" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="vm:EqBandViewModel">
+                                    <Border Background="{DynamicResource TokenSurfaceRaised}"
+                                            BorderBrush="{DynamicResource TokenBorder}"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
+                                            Margin="3,0"
+                                            Padding="4,8"
+                                            ClipToBounds="True">
+                                        <StackPanel Spacing="5" HorizontalAlignment="Center">
+                                            <!-- Gain Readout -->
+                                            <TextBlock Text="{Binding GainText}"
+                                                       FontSize="10"
+                                                       FontWeight="Normal"
+                                                       Foreground="{DynamicResource TokenText}"
+                                                       HorizontalAlignment="Center" />
+
+                                            <!-- Band Vertical Slider (-12dB to +12dB) -->
+                                            <Slider Orientation="Vertical"
+                                                    Minimum="-12"
+                                                    Maximum="12"
+                                                    Value="{Binding GainDb}"
+                                                    Height="125"
+                                                    Foreground="{DynamicResource TokenAccent}"
+                                                    HorizontalAlignment="Center" />
+
+                                            <!-- Frequency Label + Click to 0dB -->
+                                            <Button Classes="sonar-btn"
+                                                    Command="{Binding ResetBandCommand}"
+                                                    Height="20"
+                                                    Padding="5,0"
+                                                    ToolTip.Tip="Click to reset band to 0.0 dB"
+                                                    HorizontalAlignment="Center">
+                                                <TextBlock Text="{Binding FrequencyLabel}"
+                                                           FontSize="9"
+                                                           FontWeight="Normal"
+                                                           Foreground="{DynamicResource TokenTextMuted}"
+                                                           VerticalAlignment="Center" />
+                                            </Button>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                    </Grid>
+                </Border>
+
+            </Grid>
+        </Border>
+    </Border>
+
+</UserControl>

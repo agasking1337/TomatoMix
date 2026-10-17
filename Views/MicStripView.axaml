@@ -1,0 +1,266 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="using:TomatoMix.Theme"
+             x:Class="TomatoMix.Views.MicStripView">
+
+    <Border Classes="channel-strip"
+            Margin="5,0,0,0">
+        <Grid RowDefinitions="Auto,*,Auto">
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0">
+                <Border Padding="12,10"
+                        BorderBrush="{DynamicResource TokenBorder}"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Spacing="3">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Width="24"
+                                        Height="24"
+                                        CornerRadius="6"
+                                        Background="{DynamicResource TokenSurfaceInset}">
+                                    <theme:ThemeIcon Icon="Tunnel"
+                                                     Width="13"
+                                                     Height="13"
+                                                     Foreground="{DynamicResource TokenText}"
+                                                     HorizontalAlignment="Center"
+                                                     VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock Text="MIC"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           LetterSpacing="0.8"
+                                           Foreground="{DynamicResource TokenText}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                            <Border Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource TokenSurfaceInset}"
+                                    BorderBrush="{DynamicResource TokenBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="6,2">
+                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                    <Ellipse Width="6"
+                                             Height="6"
+                                             Fill="{Binding MicChannel.StatusBrush}"
+                                             VerticalAlignment="Center" />
+                                    <TextBlock Text="CAPTURE IN"
+                                               FontSize="9"
+                                               FontWeight="Normal"
+                                               Foreground="{DynamicResource TokenTextMuted}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Responsive Vertical Mic Gain Fader + VU Meter + Mute/Listen + Mini EQ -->
+            <Border Grid.Row="1"
+                    Background="Transparent"
+                    Padding="12,8"
+                    BorderBrush="{DynamicResource TokenBorder}"
+                    BorderThickness="0,0,0,1"
+                    ClipToBounds="True">
+                <Grid RowDefinitions="Auto,*,Auto,Auto" ClipToBounds="True">
+
+                    <!-- Digital Mic Gain Readout Pill -->
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource TokenSurfaceInset}"
+                            BorderBrush="{DynamicResource TokenBorder}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="8,3"
+                            HorizontalAlignment="Center"
+                            MinWidth="76"
+                            Margin="0,0,0,6">
+                        <TextBlock Text="{Binding MicChannel.VolumePercentText}"
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   Foreground="{DynamicResource TokenText}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+
+                    <!-- Flexible Fader + VU Meter Track -->
+                    <Grid Grid.Row="1"
+                          Background="Transparent"
+                          ColumnDefinitions="*,Auto,Auto,*"
+                          MinHeight="65"
+                          MaxHeight="185"
+                          VerticalAlignment="Stretch"
+                          HorizontalAlignment="Center"
+                          ClipToBounds="True">
+
+                        <!-- dB Scale Labels -->
+                        <Grid Grid.Column="0" RowDefinitions="*,*,*,*,*" Margin="0,4,8,4" HorizontalAlignment="Right">
+                            <TextBlock Grid.Row="0" Text="100" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Row="1" Text="75" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Row="2" Text="50" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Row="3" Text="25" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Row="4" Text="0" FontSize="9" FontWeight="Normal" Foreground="{DynamicResource TokenTextFaint}" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                        </Grid>
+
+                        <!-- Vertical Mic Gain Slider -->
+                        <Slider Grid.Column="1"
+                                Orientation="Vertical"
+                                Minimum="0"
+                                Maximum="100"
+                                Value="{Binding MicChannel.VolumePercent}"
+                                VerticalAlignment="Stretch"
+                                Foreground="{DynamicResource TokenAccent}"
+                                HorizontalAlignment="Center" />
+
+                        <!-- Responsive Live Vertical Mic Peak VU Meter -->
+                        <ProgressBar Grid.Column="2"
+                                     Orientation="Vertical"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Value="{Binding MicChannel.PeakLevel}"
+                                     Width="10"
+                                     MinWidth="10"
+                                     MinHeight="40"
+                                     Margin="10,4,0,4"
+                                     CornerRadius="5"
+                                     Background="{DynamicResource TokenSurfaceInset}"
+                                     BorderBrush="{DynamicResource TokenBorder}"
+                                     BorderThickness="1"
+                                     Foreground="{DynamicResource TokenAccent}"
+                                     VerticalAlignment="Stretch" />
+                    </Grid>
+
+                    <!-- Mic MUTE & LISTEN (Sidetone) Buttons -->
+                    <Grid Grid.Row="2" ColumnDefinitions="*,6,*" Margin="0,6,0,0">
+                        <ToggleButton Grid.Column="0"
+                                      Classes="mute-toggle"
+                                      IsChecked="{Binding MicChannel.IsMuted}"
+                                      HorizontalAlignment="Stretch"
+                                      Height="28"
+                                      Padding="4,0">
+                            <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <theme:ThemeIcon Icon="Close" Width="10" Height="10" VerticalAlignment="Center" />
+                                <TextBlock Text="MUTE" FontSize="10" FontWeight="Normal" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+
+                        <ToggleButton Grid.Column="2"
+                                      Classes="solo-toggle"
+                                      IsChecked="{Binding IsMicMonitoring}"
+                                      HorizontalAlignment="Stretch"
+                                      Height="28"
+                                      Padding="4,0"
+                                      ToolTip.Tip="Listen to your Microphone in real time with the 10-band Mic EQ applied (Sidetone)">
+                            <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <theme:ThemeIcon Icon="Eye" Width="10" Height="10" VerticalAlignment="Center" />
+                                <TextBlock Text="LISTEN" FontSize="10" FontWeight="Normal" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </Grid>
+
+                    <!-- MIC MINI EQ PREVIEW & STUDIO BUTTON -->
+                    <Border Grid.Row="3"
+                            Margin="0,6,0,0"
+                            Background="{DynamicResource TokenSurfaceInset}"
+                            BorderBrush="{DynamicResource TokenBorder}"
+                            BorderThickness="1"
+                            CornerRadius="7"
+                            Padding="7,5"
+                            ClipToBounds="True">
+                        <StackPanel Spacing="4">
+                            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                <ToggleButton Grid.Column="0"
+                                              Classes="accent-toggle"
+                                              IsChecked="{Binding MicChannel.IsEqEnabled}"
+                                              Width="30"
+                                              Height="20"
+                                              Padding="0"
+                                              CornerRadius="4"
+                                              FontSize="9"
+                                              FontWeight="Medium"
+                                              Content="EQ"
+                                              VerticalAlignment="Center"
+                                              ToolTip.Tip="Enable / Bypass Microphone Equalizer" />
+
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding MicChannel.EqStatusBadgeText}"
+                                           FontSize="9"
+                                           FontWeight="Normal"
+                                           Foreground="{DynamicResource TokenTextMuted}"
+                                           TextTrimming="CharacterEllipsis"
+                                           Margin="6,0"
+                                           VerticalAlignment="Center"
+                                           ToolTip.Tip="{Binding MicChannel.ActiveEqProfileName}" />
+
+                                <Button Grid.Column="2"
+                                        Classes="sonar-btn"
+                                        Command="{Binding OpenMicEqStudioCommand}"
+                                        Height="20"
+                                        Padding="6,0"
+                                        VerticalAlignment="Center"
+                                        ToolTip.Tip="Open 10-Band Microphone Equalizer">
+                                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                        <theme:ThemeIcon Icon="Tunnel" Width="10" Height="10" Foreground="{DynamicResource TokenText}" VerticalAlignment="Center" />
+                                        <TextBlock Text="EQ" FontSize="9" FontWeight="Medium" Foreground="{DynamicResource TokenText}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+
+                            <!-- Mini Live Mic Frequency Response Curve -->
+                            <Button Command="{Binding OpenMicEqStudioCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch">
+                                <Viewbox Stretch="Fill" Height="28">
+                                    <Canvas Width="220" Height="36" ClipToBounds="True">
+                                        <Line StartPoint="0,18" EndPoint="220,18" Stroke="{DynamicResource TokenBorder}" StrokeThickness="1" />
+                                        <Polygon Points="{Binding MicChannel.MiniEqFillPoints}"
+                                                 Fill="{DynamicResource TokenAccentSubtle}" />
+                                        <Polyline Points="{Binding MicChannel.MiniEqCurvePoints}"
+                                                  Stroke="{DynamicResource TokenAccent}"
+                                                  StrokeThickness="1.8" />
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                </Grid>
+            </Border>
+
+            <!-- Microphone Hardware Selector (Under Mic Strip) -->
+            <Border Grid.Row="2"
+                    Background="{DynamicResource TokenSurfaceRaised}"
+                    BorderBrush="{DynamicResource TokenBorder}"
+                    BorderThickness="0,1,0,0"
+                    CornerRadius="0,0,10,10"
+                    Padding="12,10">
+                <StackPanel Spacing="8">
+                    <!-- Mic Input Hardware Dropdown -->
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="MIC INPUT HARDWARE"
+                                   FontSize="10"
+                                   FontWeight="Medium"
+                                   Foreground="{DynamicResource TokenTextMuted}"
+                                   LetterSpacing="0.5" />
+                        <ComboBox ItemsSource="{Binding InputDevices}"
+                                  SelectedItem="{Binding SelectedMicDevice}"
+                                  HorizontalAlignment="Stretch"
+                                  Background="{DynamicResource TokenSurface}"
+                                  BorderBrush="{DynamicResource TokenBorder}"
+                                  Foreground="{DynamicResource TokenText}"
+                                  FontSize="11"
+                                  CornerRadius="6" />
+                    </StackPanel>
+
+                </StackPanel>
+            </Border>
+
+        </Grid>
+    </Border>
+
+</UserControl>

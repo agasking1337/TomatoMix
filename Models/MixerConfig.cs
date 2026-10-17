@@ -11,6 +11,7 @@ public class MixerConfig
     public string? SelectedMicDeviceId { get; set; }
     public double MasterVolume { get; set; } = 1.0;
     public bool MasterMuted { get; set; }
+    public string ChatMixTargetChannelId { get; set; } = "game";
     public double MicVolume { get; set; } = 1.0;
     public bool MicMuted { get; set; }
     public bool IsMicEqEnabled { get; set; } = true;

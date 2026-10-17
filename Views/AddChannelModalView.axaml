@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="using:TomatoMix.Theme"
+             x:Class="TomatoMix.Views.AddChannelModalView">
+
+    <Border IsVisible="{Binding IsAddChannelPopupOpen}"
+            Background="{DynamicResource TokenBackdrop}"
+            CornerRadius="10">
+        <Border Width="380"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Center"
+                Background="{DynamicResource TokenSurface}"
+                BorderBrush="{DynamicResource TokenBorderStrong}"
+                BorderThickness="1"
+                CornerRadius="12"
+                Padding="22">
+            <StackPanel Spacing="16">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="CREATE CUSTOM CHANNEL"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               LetterSpacing="0.8"
+                               Foreground="{DynamicResource TokenText}" />
+                    <TextBlock Text="Add a new logical audio group to your mixer."
+                               FontSize="12"
+                               FontWeight="Normal"
+                               Foreground="{DynamicResource TokenTextMuted}" />
+                </StackPanel>
+
+                <StackPanel Spacing="6">
+                    <TextBlock Text="CHANNEL NAME"
+                               FontSize="10"
+                               FontWeight="Medium"
+                               LetterSpacing="0.6"
+                               Foreground="{DynamicResource TokenTextMuted}" />
+                    <TextBox Text="{Binding NewChannelName}"
+                             Watermark="e.g. BROWSER, MUSIC, STREAM"
+                             Background="{DynamicResource TokenSurfaceInset}"
+                             BorderBrush="{DynamicResource TokenBorder}"
+                             Foreground="{DynamicResource TokenText}"
+                             FontSize="13"
+                             Padding="10,8"
+                             CornerRadius="6" />
+                </StackPanel>
+
+                <StackPanel Spacing="8">
+                    <TextBlock Text="CHANNEL ICON"
+                               FontSize="10"
+                               FontWeight="Medium"
+                               LetterSpacing="0.6"
+                               Foreground="{DynamicResource TokenTextMuted}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="sonar-btn" Command="{Binding SelectNewChannelIconCommand}" CommandParameter="settings" Width="36" Height="36" Padding="0">
+                            <theme:ThemeIcon Icon="Settings" Width="14" Height="14" />
+                        </Button>
+                        <Button Classes="sonar-btn" Command="{Binding SelectNewChannelIconCommand}" CommandParameter="dashboard" Width="36" Height="36" Padding="0">
+                            <theme:ThemeIcon Icon="Dashboard" Width="14" Height="14" />
+                        </Button>
+                        <Button Classes="sonar-btn" Command="{Binding SelectNewChannelIconCommand}" CommandParameter="terminal" Width="36" Height="36" Padding="0">
+                            <theme:ThemeIcon Icon="Terminal" Width="14" Height="14" />
+                        </Button>
+                        <Button Classes="sonar-btn" Command="{Binding SelectNewChannelIconCommand}" CommandParameter="play" Width="36" Height="36" Padding="0">
+                            <theme:ThemeIcon Icon="Play" Width="14" Height="14" />
+                        </Button>
+                        <Button Classes="sonar-btn" Command="{Binding SelectNewChannelIconCommand}" CommandParameter="layers" Width="36" Height="36" Padding="0">
+                            <theme:ThemeIcon Icon="Layers" Width="14" Height="14" />
+                        </Button>
+                        <Button Classes="sonar-btn" Command="{Binding SelectNewChannelIconCommand}" CommandParameter="star" Width="36" Height="36" Padding="0">
+                            <theme:ThemeIcon Icon="Star" Width="14" Height="14" />
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+
+                <Grid ColumnDefinitions="*,10,*" Margin="0,6,0,0">
+                    <Button Grid.Column="0"
+                            Classes="sonar-btn"
+                            Content="CANCEL"
+                            Command="{Binding CancelAddChannelCommand}"
+                            HorizontalAlignment="Stretch"
+                            Height="36" />
+                    <Button Grid.Column="2"
+                            Classes="accent-btn"
+                            Content="CREATE CHANNEL"
+                            Command="{Binding ConfirmAddChannelCommand}"
+                            HorizontalAlignment="Stretch"
+                            Height="36" />
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Border>
+
+</UserControl>
