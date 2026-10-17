@@ -62,6 +62,10 @@ public class ConfigService
                     cfg.ChatMixTargetChannelId = string.Equals(cfg.ChatMixTargetChannelId, "media", StringComparison.OrdinalIgnoreCase)
                         ? "media"
                         : "game";
+                    cfg.ChatMixToggleModeKeybind ??= "Ctrl+M";
+                    cfg.ChatMixGameModeKeybind ??= "Ctrl+1";
+                    cfg.ChatMixMediaModeKeybind ??= "Ctrl+2";
+                    cfg.ChatMixToggleBiasKeybind ??= "Ctrl+B";
 
                     // Also load any standalone .eqprofile.json files in EqProfiles folder
                     LoadExternalProfileFiles(cfg);
@@ -311,6 +315,10 @@ public class ConfigService
             MasterVolume = 1.0,
             MasterMuted = false,
             ChatMixTargetChannelId = "game",
+            ChatMixToggleModeKeybind = "Ctrl+M",
+            ChatMixGameModeKeybind = "Ctrl+1",
+            ChatMixMediaModeKeybind = "Ctrl+2",
+            ChatMixToggleBiasKeybind = "Ctrl+B",
             MicVolume = 1.0,
             MicMuted = false,
             IsMicEqEnabled = true,

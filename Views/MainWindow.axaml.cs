@@ -15,6 +15,19 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         AddHandler(PointerWheelChangedEvent, OnPointerWheelChanged, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+        AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+    }
+
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || DataContext is not MainWindowViewModel vm)
+            return;
+
+        bool isTextInputFocused = (FocusManager?.GetFocusedElement() ?? e.Source) is TextBox;
+        if (vm.HandleWindowKeyDown(e.Key, e.KeyModifiers, isTextInputFocused))
+        {
+            e.Handled = true;
+        }
     }
 
     private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)

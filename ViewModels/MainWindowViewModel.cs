@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Avalonia;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -112,6 +113,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private string _chatMixTargetChannelId = "game";
 
     [ObservableProperty]
+    private string _chatMixToggleModeKeybind = "Ctrl+M";
+
+    [ObservableProperty]
+    private string _chatMixGameModeKeybind = "Ctrl+1";
+
+    [ObservableProperty]
+    private string _chatMixMediaModeKeybind = "Ctrl+2";
+
+    [ObservableProperty]
+    private string _chatMixToggleBiasKeybind = "Ctrl+B";
+
+    [ObservableProperty]
+    private string? _recordingKeybindTarget;
+
+    [ObservableProperty]
     private double _gameChannelPeakLevel;
 
     [ObservableProperty]
@@ -193,6 +209,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public string ChatMixTargetPresetTooltip => IsChatMixMediaTarget ? "Bias toward Media (+50%)" : "Bias toward Game (+50%)";
     public IconName ChatMixTargetIcon => IsChatMixMediaTarget ? IconName.Play : IconName.Dashboard;
     public string ChatMixModeBadgeText => $"CHAT + {ChatMixTargetChannelLabel}";
+    public string ChatMixModeBadgeTooltip => string.IsNullOrWhiteSpace(ChatMixToggleModeKeybind)
+        ? "Click to toggle between Chat + Game and Chat + Media"
+        : $"Click to toggle Chat + Game / Media ({FormatKeybindDisplay(ChatMixToggleModeKeybind)})";
+    public bool IsRecordingToggleModeKeybind => string.Equals(RecordingKeybindTarget, "toggle_mode", StringComparison.OrdinalIgnoreCase);
+    public bool IsNotRecordingToggleModeKeybind => !IsRecordingToggleModeKeybind;
+    public bool IsRecordingGameModeKeybind => string.Equals(RecordingKeybindTarget, "game_mode", StringComparison.OrdinalIgnoreCase);
+    public bool IsNotRecordingGameModeKeybind => !IsRecordingGameModeKeybind;
+    public bool IsRecordingMediaModeKeybind => string.Equals(RecordingKeybindTarget, "media_mode", StringComparison.OrdinalIgnoreCase);
+    public bool IsNotRecordingMediaModeKeybind => !IsRecordingMediaModeKeybind;
+    public bool IsRecordingToggleBiasKeybind => string.Equals(RecordingKeybindTarget, "toggle_bias", StringComparison.OrdinalIgnoreCase);
+    public bool IsNotRecordingToggleBiasKeybind => !IsRecordingToggleBiasKeybind;
+    public string ChatMixToggleModeKeybindDisplay => IsRecordingToggleModeKeybind ? "PRESS KEY..." : FormatKeybindDisplay(ChatMixToggleModeKeybind);
+    public string ChatMixGameModeKeybindDisplay => IsRecordingGameModeKeybind ? "PRESS KEY..." : FormatKeybindDisplay(ChatMixGameModeKeybind);
+    public string ChatMixMediaModeKeybindDisplay => IsRecordingMediaModeKeybind ? "PRESS KEY..." : FormatKeybindDisplay(ChatMixMediaModeKeybind);
+    public string ChatMixToggleBiasKeybindDisplay => IsRecordingToggleBiasKeybind ? "PRESS KEY..." : FormatKeybindDisplay(ChatMixToggleBiasKeybind);
     public string ChatMixLabelText
     {
         get
@@ -226,6 +257,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _chatMixTargetChannelId = string.Equals(_config.ChatMixTargetChannelId, "media", StringComparison.OrdinalIgnoreCase)
             ? "media"
             : "game";
+        _chatMixToggleModeKeybind = _config.ChatMixToggleModeKeybind ?? "Ctrl+M";
+        _chatMixGameModeKeybind = _config.ChatMixGameModeKeybind ?? "Ctrl+1";
+        _chatMixMediaModeKeybind = _config.ChatMixMediaModeKeybind ?? "Ctrl+2";
+        _chatMixToggleBiasKeybind = _config.ChatMixToggleBiasKeybind ?? "Ctrl+B";
         ThemeTokens.SetTheme(_isDarkTheme);
 
         InitializeEqBands();
@@ -398,6 +433,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void CloseSettingsPage()
     {
+        RecordingKeybindTarget = null;
         IsSettingsPageOpen = false;
     }
 
@@ -718,10 +754,56 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         StatusMessage = $"CHATMIX PAIR: CHAT + {ChatMixTargetChannelLabel}";
     }
 
+    partial void OnChatMixToggleModeKeybindChanged(string value)
+    {
+        _config.ChatMixToggleModeKeybind = value ?? string.Empty;
+        OnPropertyChanged(nameof(ChatMixToggleModeKeybindDisplay));
+        OnPropertyChanged(nameof(ChatMixModeBadgeTooltip));
+        SchedulePersist();
+    }
+
+    partial void OnChatMixGameModeKeybindChanged(string value)
+    {
+        _config.ChatMixGameModeKeybind = value ?? string.Empty;
+        OnPropertyChanged(nameof(ChatMixGameModeKeybindDisplay));
+        SchedulePersist();
+    }
+
+    partial void OnChatMixMediaModeKeybindChanged(string value)
+    {
+        _config.ChatMixMediaModeKeybind = value ?? string.Empty;
+        OnPropertyChanged(nameof(ChatMixMediaModeKeybindDisplay));
+        SchedulePersist();
+    }
+
+    partial void OnChatMixToggleBiasKeybindChanged(string value)
+    {
+        _config.ChatMixToggleBiasKeybind = value ?? string.Empty;
+        OnPropertyChanged(nameof(ChatMixToggleBiasKeybindDisplay));
+        SchedulePersist();
+    }
+
+    partial void OnRecordingKeybindTargetChanged(string? value)
+    {
+        OnPropertyChanged(nameof(IsRecordingToggleModeKeybind));
+        OnPropertyChanged(nameof(IsNotRecordingToggleModeKeybind));
+        OnPropertyChanged(nameof(IsRecordingGameModeKeybind));
+        OnPropertyChanged(nameof(IsNotRecordingGameModeKeybind));
+        OnPropertyChanged(nameof(IsRecordingMediaModeKeybind));
+        OnPropertyChanged(nameof(IsNotRecordingMediaModeKeybind));
+        OnPropertyChanged(nameof(IsRecordingToggleBiasKeybind));
+        OnPropertyChanged(nameof(IsNotRecordingToggleBiasKeybind));
+        OnPropertyChanged(nameof(ChatMixToggleModeKeybindDisplay));
+        OnPropertyChanged(nameof(ChatMixGameModeKeybindDisplay));
+        OnPropertyChanged(nameof(ChatMixMediaModeKeybindDisplay));
+        OnPropertyChanged(nameof(ChatMixToggleBiasKeybindDisplay));
+    }
+
     // ==================== PER-CHANNEL EQ STUDIO & PROFILE SAVER METHODS ====================
 
     public void OpenChannelEqStudio(ChannelViewModel channel)
     {
+        RecordingKeybindTarget = null;
         IsSettingsPageOpen = false;
         EqTargetChannel = channel;
         _suppressEqBandSync = true;
@@ -1082,6 +1164,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             OnPropertyChanged(nameof(IsChatMixGameTarget));
             OnPropertyChanged(nameof(IsChatMixMediaTarget));
+            StatusMessage = $"CHATMIX PAIR: CHAT + {ChatMixTargetChannelLabel}";
             return;
         }
         ChatMixTargetChannelId = target;
@@ -1092,6 +1175,207 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         ChatMixTargetChannelId = IsChatMixMediaTarget ? "game" : "media";
     }
+
+    [RelayCommand]
+    private void ToggleChatMixBias()
+    {
+        if (ChatMixBalance <= 0)
+        {
+            ChatMixBalance = 50.0;
+            StatusMessage = "CHATMIX BIAS: CHAT (+50%)";
+        }
+        else
+        {
+            ChatMixBalance = -50.0;
+            StatusMessage = $"CHATMIX BIAS: {ChatMixTargetChannelLabel} (+50%)";
+        }
+    }
+
+    [RelayCommand]
+    private void StartRecordingKeybind(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+            return;
+
+        if (string.Equals(RecordingKeybindTarget, target, StringComparison.OrdinalIgnoreCase))
+        {
+            RecordingKeybindTarget = null;
+            StatusMessage = "KEYBIND RECORDING CANCELLED";
+            return;
+        }
+
+        RecordingKeybindTarget = target;
+        StatusMessage = "PRESS A KEY OR COMBINATION (ESC TO CANCEL, DEL TO CLEAR)";
+    }
+
+    [RelayCommand]
+    private void ResetDefaultKeybinds()
+    {
+        RecordingKeybindTarget = null;
+        ChatMixToggleModeKeybind = "Ctrl+M";
+        ChatMixGameModeKeybind = "Ctrl+1";
+        ChatMixMediaModeKeybind = "Ctrl+2";
+        ChatMixToggleBiasKeybind = "Ctrl+B";
+        StatusMessage = "CHATMIX KEYBINDS RESET TO DEFAULTS";
+    }
+
+    public bool HandleWindowKeyDown(Key key, KeyModifiers modifiers, bool isTextInputFocused)
+    {
+        if (key is Key.None or Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin)
+            return false;
+
+        var mods = modifiers & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Alt);
+
+        if (!string.IsNullOrEmpty(RecordingKeybindTarget))
+        {
+            if (key == Key.Escape && mods == KeyModifiers.None)
+            {
+                RecordingKeybindTarget = null;
+                StatusMessage = "KEYBIND RECORDING CANCELLED";
+                return true;
+            }
+
+            if (key is Key.Back or Key.Delete && mods == KeyModifiers.None)
+            {
+                ApplyRecordedKeybind(RecordingKeybindTarget, string.Empty);
+                RecordingKeybindTarget = null;
+                return true;
+            }
+
+            string recorded = BuildKeybindString(key, mods);
+            ApplyRecordedKeybind(RecordingKeybindTarget, recorded);
+            RecordingKeybindTarget = null;
+            return true;
+        }
+
+        if (isTextInputFocused)
+            return false;
+
+        string pressed = BuildKeybindString(key, mods);
+
+        if (MatchesKeybind(pressed, ChatMixToggleModeKeybind))
+        {
+            ToggleChatMixTargetChannel();
+            return true;
+        }
+
+        if (MatchesKeybind(pressed, ChatMixGameModeKeybind))
+        {
+            SetChatMixTargetChannel("game");
+            return true;
+        }
+
+        if (MatchesKeybind(pressed, ChatMixMediaModeKeybind))
+        {
+            SetChatMixTargetChannel("media");
+            return true;
+        }
+
+        if (MatchesKeybind(pressed, ChatMixToggleBiasKeybind))
+        {
+            ToggleChatMixBias();
+            return true;
+        }
+
+        return false;
+    }
+
+    private void ApplyRecordedKeybind(string target, string combo)
+    {
+        if (!string.IsNullOrWhiteSpace(combo))
+        {
+            if (!string.Equals(target, "toggle_mode", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(ChatMixToggleModeKeybind, combo, StringComparison.OrdinalIgnoreCase))
+            {
+                ChatMixToggleModeKeybind = string.Empty;
+            }
+            if (!string.Equals(target, "game_mode", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(ChatMixGameModeKeybind, combo, StringComparison.OrdinalIgnoreCase))
+            {
+                ChatMixGameModeKeybind = string.Empty;
+            }
+            if (!string.Equals(target, "media_mode", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(ChatMixMediaModeKeybind, combo, StringComparison.OrdinalIgnoreCase))
+            {
+                ChatMixMediaModeKeybind = string.Empty;
+            }
+            if (!string.Equals(target, "toggle_bias", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(ChatMixToggleBiasKeybind, combo, StringComparison.OrdinalIgnoreCase))
+            {
+                ChatMixToggleBiasKeybind = string.Empty;
+            }
+        }
+
+        switch (target.ToLowerInvariant())
+        {
+            case "toggle_mode":
+                ChatMixToggleModeKeybind = combo;
+                break;
+            case "game_mode":
+                ChatMixGameModeKeybind = combo;
+                break;
+            case "media_mode":
+                ChatMixMediaModeKeybind = combo;
+                break;
+            case "toggle_bias":
+                ChatMixToggleBiasKeybind = combo;
+                break;
+        }
+
+        StatusMessage = string.IsNullOrWhiteSpace(combo)
+            ? "KEYBIND CLEARED"
+            : $"KEYBIND SET: {FormatKeybindDisplay(combo)}";
+    }
+
+    private static bool MatchesKeybind(string pressed, string? configured)
+    {
+        return !string.IsNullOrWhiteSpace(configured)
+               && string.Equals(pressed, configured.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string FormatKeybindDisplay(string? keybind)
+    {
+        if (string.IsNullOrWhiteSpace(keybind))
+            return "NONE";
+
+        return keybind.Trim().Replace("+", " + ").ToUpperInvariant();
+    }
+
+    private static string BuildKeybindString(Key key, KeyModifiers mods)
+    {
+        var parts = new List<string>(4);
+        if (mods.HasFlag(KeyModifiers.Control)) parts.Add("Ctrl");
+        if (mods.HasFlag(KeyModifiers.Alt)) parts.Add("Alt");
+        if (mods.HasFlag(KeyModifiers.Shift)) parts.Add("Shift");
+        parts.Add(FormatKeyToken(key));
+        return string.Join("+", parts);
+    }
+
+    private static string FormatKeyToken(Key key) => key switch
+    {
+        Key.D0 => "0",
+        Key.D1 => "1",
+        Key.D2 => "2",
+        Key.D3 => "3",
+        Key.D4 => "4",
+        Key.D5 => "5",
+        Key.D6 => "6",
+        Key.D7 => "7",
+        Key.D8 => "8",
+        Key.D9 => "9",
+        Key.OemMinus => "-",
+        Key.OemPlus => "=",
+        Key.OemOpenBrackets => "[",
+        Key.OemCloseBrackets => "]",
+        Key.OemPipe => "\\",
+        Key.OemSemicolon => ";",
+        Key.OemQuotes => "'",
+        Key.OemComma => ",",
+        Key.OemPeriod => ".",
+        Key.OemQuestion => "/",
+        Key.OemTilde => "`",
+        _ => key.ToString()
+    };
 
     [RelayCommand]
     private void ToggleMasterMute()
@@ -1112,6 +1396,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void OpenAddChannelPopup()
     {
+        RecordingKeybindTarget = null;
         IsSettingsPageOpen = false;
         int customIndex = Channels.Count(c => !c.IsPreset);
         NewChannelName = $"CUSTOM {customIndex + 1}";

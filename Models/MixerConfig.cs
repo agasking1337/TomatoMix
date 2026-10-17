@@ -12,6 +12,10 @@ public class MixerConfig
     public double MasterVolume { get; set; } = 1.0;
     public bool MasterMuted { get; set; }
     public string ChatMixTargetChannelId { get; set; } = "game";
+    public string ChatMixToggleModeKeybind { get; set; } = "Ctrl+M";
+    public string ChatMixGameModeKeybind { get; set; } = "Ctrl+1";
+    public string ChatMixMediaModeKeybind { get; set; } = "Ctrl+2";
+    public string ChatMixToggleBiasKeybind { get; set; } = "Ctrl+B";
     public double MicVolume { get; set; } = 1.0;
     public bool MicMuted { get; set; }
     public bool IsMicEqEnabled { get; set; } = true;

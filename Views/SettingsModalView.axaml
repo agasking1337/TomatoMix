@@ -135,6 +135,115 @@
                                         </StackPanel>
                                     </Button>
                                 </Grid>
+
+                                <Border Height="1"
+                                        Background="{DynamicResource TokenBorder}"
+                                        Margin="0,2,0,0" />
+
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <theme:ThemeIcon Icon="Key" Width="12" Height="12" Foreground="{DynamicResource TokenTextMuted}" VerticalAlignment="Center" />
+                                            <TextBlock Text="KEYBINDS"
+                                                       FontSize="10"
+                                                       FontWeight="Medium"
+                                                       LetterSpacing="0.6"
+                                                       Foreground="{DynamicResource TokenTextMuted}"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <TextBlock Text="Click a shortcut to rebind (Esc to cancel, Delete to clear)"
+                                                   FontSize="10"
+                                                   Foreground="{DynamicResource TokenTextMuted}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1"
+                                            Classes="sonar-btn"
+                                            Command="{Binding ResetDefaultKeybindsCommand}"
+                                            Height="26"
+                                            Padding="10,0"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Restore default ChatMix keyboard shortcuts">
+                                        <TextBlock Text="RESET" FontSize="9" VerticalAlignment="Center" />
+                                    </Button>
+                                </Grid>
+
+                                <StackPanel Spacing="6">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0"
+                                                   Text="Toggle Chat + Game / Media mode"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TokenText}"
+                                                   VerticalAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Classes.accent-btn="{Binding IsRecordingToggleModeKeybind}"
+                                                Classes.sonar-btn="{Binding IsNotRecordingToggleModeKeybind}"
+                                                Command="{Binding StartRecordingKeybindCommand}"
+                                                CommandParameter="toggle_mode"
+                                                MinWidth="116"
+                                                Height="28"
+                                                Padding="10,0"
+                                                ToolTip.Tip="Click and press a key combination to toggle between Chat + Game and Chat + Media">
+                                            <TextBlock Text="{Binding ChatMixToggleModeKeybindDisplay}" FontSize="10" VerticalAlignment="Center" />
+                                        </Button>
+                                    </Grid>
+
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0"
+                                                   Text="Switch to Chat + Game mode"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TokenText}"
+                                                   VerticalAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Classes.accent-btn="{Binding IsRecordingGameModeKeybind}"
+                                                Classes.sonar-btn="{Binding IsNotRecordingGameModeKeybind}"
+                                                Command="{Binding StartRecordingKeybindCommand}"
+                                                CommandParameter="game_mode"
+                                                MinWidth="116"
+                                                Height="28"
+                                                Padding="10,0"
+                                                ToolTip.Tip="Click and press a key combination to switch directly to Chat + Game">
+                                            <TextBlock Text="{Binding ChatMixGameModeKeybindDisplay}" FontSize="10" VerticalAlignment="Center" />
+                                        </Button>
+                                    </Grid>
+
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0"
+                                                   Text="Switch to Chat + Media mode"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TokenText}"
+                                                   VerticalAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Classes.accent-btn="{Binding IsRecordingMediaModeKeybind}"
+                                                Classes.sonar-btn="{Binding IsNotRecordingMediaModeKeybind}"
+                                                Command="{Binding StartRecordingKeybindCommand}"
+                                                CommandParameter="media_mode"
+                                                MinWidth="116"
+                                                Height="28"
+                                                Padding="10,0"
+                                                ToolTip.Tip="Click and press a key combination to switch directly to Chat + Media">
+                                            <TextBlock Text="{Binding ChatMixMediaModeKeybindDisplay}" FontSize="10" VerticalAlignment="Center" />
+                                        </Button>
+                                    </Grid>
+
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0"
+                                                   Text="Toggle Chat / Target bias (+50%)"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TokenText}"
+                                                   VerticalAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Classes.accent-btn="{Binding IsRecordingToggleBiasKeybind}"
+                                                Classes.sonar-btn="{Binding IsNotRecordingToggleBiasKeybind}"
+                                                Command="{Binding StartRecordingKeybindCommand}"
+                                                CommandParameter="toggle_bias"
+                                                MinWidth="116"
+                                                Height="28"
+                                                Padding="10,0"
+                                                ToolTip.Tip="Click and press a key combination to alternate ChatMix bias between Chat and Game/Media">
+                                            <TextBlock Text="{Binding ChatMixToggleBiasKeybindDisplay}" FontSize="10" VerticalAlignment="Center" />
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 

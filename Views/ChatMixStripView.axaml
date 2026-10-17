@@ -33,19 +33,22 @@
                                            Foreground="{DynamicResource TokenText}"
                                            VerticalAlignment="Center" />
                             </StackPanel>
-                            <Border Grid.Column="1"
+                            <Button Grid.Column="1"
+                                    Classes="sonar-btn"
+                                    Command="{Binding ToggleChatMixTargetChannelCommand}"
                                     VerticalAlignment="Center"
                                     Background="{DynamicResource TokenSurfaceInset}"
                                     BorderBrush="{DynamicResource TokenBorder}"
                                     BorderThickness="1"
                                     CornerRadius="4"
-                                    Padding="6,2">
+                                    Padding="6,2"
+                                    ToolTip.Tip="{Binding ChatMixModeBadgeTooltip}">
                                 <TextBlock Text="{Binding ChatMixModeBadgeText}"
                                            FontSize="9"
                                            FontWeight="Normal"
                                            Foreground="{DynamicResource TokenTextMuted}"
                                            VerticalAlignment="Center" />
-                            </Border>
+                            </Button>
                         </Grid>
                     </StackPanel>
                 </Border>
